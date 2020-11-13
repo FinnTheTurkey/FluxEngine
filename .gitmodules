@@ -1,0 +1,3 @@
+[submodule "ThirdParty/term-colors"]
+	path = ThirdParty/term-colors
+	url = https://github.com/FinnTheTurkey/term-colors.git
