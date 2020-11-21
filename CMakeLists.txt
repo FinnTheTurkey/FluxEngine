@@ -7,15 +7,29 @@ enable_testing()
 
 add_library(FluxEngine 
 # Headers
+# ===================
 Include/Flux/Flux.hh
 Include/Flux/ECS.hh
 Include/Flux/Log.hh
 Include/Flux/Threads.hh
+Include/Flux/Resources.hh
+
+# Renderer headers
+Include/Flux/Renderer.hh
+Include/Flux/OpenGL/GLRenderer.hh
+
 # Source files
+# ===================
 Src/ECS.cc 
 Src/Entry.cc
 Src/Threads.cc
-Src/DevTools/Log.cc)
+Src/DevTools/Log.cc
+Src/Res/Resources.cc
+
+# Renderer source files
+Src/Renderer/Renderer.cc
+Src/OpenGL/GLRenderer.cc
+)
 
 target_include_directories(FluxEngine PUBLIC Include)
 # include_directories(Include)
@@ -31,3 +45,24 @@ include(CPack)
 # External depenencies
 add_subdirectory(ThirdParty/term-colors)
 target_link_libraries(FluxEngine PUBLIC termcolors)
+
+# Open GL
+set(OpenGL_GL_PREFERENCE GLVND)
+find_package(OpenGL REQUIRED)
+target_link_libraries(FluxEngine PUBLIC OpenGL::GL)
+
+# Glad
+add_subdirectory(ThirdParty/glad)
+target_link_libraries(FluxEngine PUBLIC glad)
+
+# GLFW
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+# GLM
+add_subdirectory(ThirdParty/glm)
+target_link_libraries(FluxEngine PUBLIC glm)
+
+add_subdirectory(ThirdParty/glfw)
+target_link_libraries(FluxEngine PUBLIC glfw)

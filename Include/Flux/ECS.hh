@@ -66,10 +66,13 @@ namespace Flux
         /* ID to be used for the next Entity if the reuse queue is empty*/
         int current_id;
 
+        /** Array where the actual systems are stored */
+        System systems[FLUX_MAX_SYSTEMS];
+
         /**
          * Vector of systems. Using a vector so systems can be added at the front and back.
          */
-        std::vector<System> systems;
+        std::vector<SystemID> system_order;
         int system_count;
         int id_count;
 
@@ -78,6 +81,9 @@ namespace Flux
 
         /** Queue of IDs waiting to be reused */
         std::queue<EntityID> reuse;
+
+        /** System reuse */
+        std::queue<SystemID> system_reuse;
     };
 
 
@@ -125,6 +131,11 @@ namespace Flux
     **WARNING:** This function should **never** be run every frame due to it's use of a map
     */
     ComponentTypeID getComponentType(const std::string& name);
+
+    /**
+    Adds a function that will be called when that type of component is destroyed
+    */
+    void setComponentDestructor(ComponentTypeID component, void (*function)(ECSCtx* ctx, EntityID entity));
 
     /**
     Adds a component to an Entity. 
@@ -182,6 +193,11 @@ namespace Flux
      * Runs through all the systems on all the Entities
      */
     void runSystems(ECSCtx* ctx, float delta);
+
+    /**
+    Runs a single system
+    */
+    void runSystem(ECSCtx *ctx, SystemID sys, float delta);
 
 };
 

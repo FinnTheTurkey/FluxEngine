@@ -16,4 +16,8 @@ namespace Flux
 
 void init();
 
+void loop(float delta);
+
+void end();
+
 #endif
