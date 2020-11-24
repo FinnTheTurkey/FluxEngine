@@ -3,7 +3,13 @@
 
 #include "Flux/ECS.hh"
 #include "Flux/Resources.hh"
+
+// STL
 #include <bits/stdint-uintn.h>
+
+// GLM
+#include <glm/glm.hpp>
+#include "glm/fwd.hpp"
 
 namespace Flux { namespace Renderer {
 
@@ -75,7 +81,8 @@ namespace Flux { namespace Renderer {
 
 
     /**
-    Links a mesh to an entity. Takes a MeshRes and a ShaderRes
+    Links a mesh to an entity. Takes a MeshRes and a ShaderRes.
+    Also adds a transformation component
     */
     void addMesh(ECSCtx* ctx, EntityID entity, Resources::ResourceID mesh, Resources::ResourceID shaders);
 
@@ -90,7 +97,48 @@ namespace Flux { namespace Renderer {
     */
     void temp_addShaders(ECSCtx* ctx, EntityID entity, const std::string& vert_fname, const std::string& frag_fname);
 
+}
 
-}}
+namespace Transform
+{
+    /**
+    Component that handles all the math involved in the transformation of 3d objects
+    */
+    struct TransformCom: Component
+    {
+        glm::mat4 transformation;
+        glm::mat4 model_view;
+    };
+
+    /**
+    Camera component
+    */
+    struct CameraCom: Component
+    {
+        glm::mat4 view_matrix;
+    };
+
+    /** 
+    Sets an entity as a camera. Can be used on any entity with the Transfrom component
+    */
+    void setCamera(ECSCtx* ctx, EntityID entity);
+
+    /**
+    Rotates an entity with the transform component
+    */
+    void rotate(ECSCtx* ctx, EntityID entity, const glm::vec3& axis, const float& angle_rad);
+
+    /**
+    Move (or translates) an entity by offset
+    */
+    void translate(ECSCtx *ctx, EntityID entity, const glm::vec3& offset);
+
+    /**
+    Add the camera and transformation systems to the given ECS
+    */
+    void addTransformSystems(ECSCtx* ctx);
+
+}
+}
 
 #endif

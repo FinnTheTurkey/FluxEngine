@@ -6,35 +6,36 @@
 #include "Flux/Threads.hh"
 
 // STL
+#include <algorithm>
 #include <map>
 #include <string>
 
 using namespace Flux;
 
-ECSCtx* Flux::createContext()
+ECSCtx Flux::createContext()
 {
-    ECSCtx* ctx = new ECSCtx;
+    ECSCtx ctx;
 
     // Clean out entities
     for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
     {
-        ctx->entities[i] = nullptr;
+        ctx.entities[i] = nullptr;
     }
 
     // Initialise systems
-    ctx->system_order = std::vector<SystemID>();
-    ctx->system_count = 0;
+    ctx.system_order = std::vector<SystemID>();
+    ctx.system_count = 0;
 
     // We don't need to clean out systems
 
     // Initialize reuse queue
-    ctx->reuse = std::queue<int>();
-    ctx->system_reuse = std::queue<SystemID>();
+    ctx.reuse = std::queue<int>();
+    ctx.system_reuse = std::queue<SystemID>();
 
     // Start ID count
-    ctx->current_id = 0;
+    ctx.current_id = 0;
 
-    return ctx;
+    return std::move(ctx);
 }
 
 bool Flux::destroyContext(ECSCtx* ctx)
@@ -299,9 +300,11 @@ void Flux::runSystem(ECSCtx *ctx, SystemID sys, float delta)
 {
     if (ctx->systems[sys].threaded)
     {
+        #ifndef FLUX_NO_THREADING
         // Do threading stuff
         Threads::runThreads(Flux::threading_context, ctx, &ctx->systems[sys], delta);
         Threads::waitForThreads(Flux::threading_context);
+        #endif
     }
     else
     {

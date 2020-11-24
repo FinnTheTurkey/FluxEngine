@@ -1,6 +1,10 @@
+#define GLM_FORCE_CTOR_INIT
 #include "Flux/Renderer.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Resources.hh"
+#include "glm/fwd.hpp"
+
+#include <glm/glm.hpp>
 
 // STL includes
 #include <fstream>
@@ -8,6 +12,7 @@
 using namespace Flux;
 
 static Flux::ComponentTypeID MeshComponentID = -1;
+static Flux::ComponentTypeID TransformComponentID = -1;
 
 std::string temp_readFile(const std::string& filename)
 {
@@ -57,8 +62,14 @@ void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID
 
     if (MeshComponentID == -1)
     {
+        // Setup components
         MeshComponentID = Flux::getComponentType("mesh");
+        TransformComponentID = Flux::getComponentType("transform");
     }
 
+    Flux::Transform::TransformCom* tc = new Flux::Transform::TransformCom;
+    tc->transformation = glm::mat4();
+
     Flux::addComponent(ctx, entity, MeshComponentID, mc);
+    Flux::addComponent(ctx, entity, TransformComponentID, tc);
 }

@@ -6,6 +6,12 @@
 #include "Flux/Resources.hh"
 #include "GLFW/glfw3.h"
 #include <bits/stdint-uintn.h>
+#include <map>
+#include <string>
+#include <sstream>
+
+#include "glm/gtc/type_ptr.hpp"
+#include "glm/trigonometric.hpp"
 
 
 using namespace Flux::GLRenderer;
@@ -14,6 +20,7 @@ using namespace Flux::GLRenderer;
 static GLCtx* current_window = nullptr;
 
 static Flux::ComponentTypeID MeshComponentID;
+static Flux::ComponentTypeID TransformComponentID;
 static Flux::ComponentTypeID GLMeshComponentID;
 static Flux::ComponentTypeID GLEntityComponentID;
 static Flux::ComponentTypeID TempShaderComponentID;
@@ -104,8 +111,13 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
     // Setup callbacks
     glfwSetFramebufferSizeCallback(gctx->window, onFramebufferSizeChanged);
 
+    // Disable V-Sync
+    // TODO: Make this an option
+    glfwSwapInterval(0); // 1 for v-sync
+
     // Load IDs for components
     MeshComponentID = Flux::getComponentType("mesh");
+    TransformComponentID = Flux::getComponentType("transform");
     GLMeshComponentID = Flux::getComponentType("gl_mesh");
     GLEntityComponentID = Flux::getComponentType("gl_entity");
     TempShaderComponentID = Flux::getComponentType("temp_shader");
@@ -116,6 +128,11 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
     Flux::setComponentDestructor(GLShaderComponentID, destructorGLShader);
 }
 
+
+double Flux::GLRenderer::getTime()
+{
+    return glfwGetTime();
+}
 
 bool Flux::GLRenderer::startFrame()
 {
@@ -139,9 +156,21 @@ void Flux::GLRenderer::destroyWindow()
     delete current_window;
     current_window = nullptr;
 }
+static glm::mat4 projection;
+void showFPS(GLFWwindow* window);
 
 void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
 {
+    if (entity == 0)
+    {
+        // First entity
+        // Calcualte projection matrix
+        // TODO: Customisable field of view
+        projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
+
+        showFPS(current_window->window);
+    }
+
     if (!Flux::hasComponent(ctx, entity, MeshComponentID))
     {
         // Doesn't have a mesh - we don't care
@@ -155,7 +184,7 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
     {
         // It hasn't been initialized yet
         // Make sure they don't already exist
-        if (!Flux::hasComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID))
+        if (!Flux::hasComponent(&Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID))
         {
             
             // Get the resource
@@ -190,11 +219,11 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
             mesh_com->num_indices = mesh_res->indices_length;
 
             // Add to resource entity
-            Flux::addComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID, mesh_com);
+            Flux::addComponent(&Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID, mesh_com);
         }
 
         // Make sure they don't already exist
-        if (!Flux::hasComponent(Flux::Resources::rctx, mesh->mesh_resource, GLShaderComponentID))
+        if (!Flux::hasComponent(&Flux::Resources::rctx, mesh->mesh_resource, GLShaderComponentID))
         {
 
             // Find the resources
@@ -263,17 +292,26 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
             glDeleteShader(fragment_shader);
 
             // Add to resource entity
-            Flux::addComponent(Flux::Resources::rctx, mesh->shader_resource, GLShaderComponentID, shader_com);
+            Flux::addComponent(&Flux::Resources::rctx, mesh->shader_resource, GLShaderComponentID, shader_com);
         }
 
         Flux::addComponent(ctx, entity, GLEntityComponentID, new GLEntityCom);
     }
 
     // Actually render
-    GLMeshCom* mesh_com = (GLMeshCom*)Flux::getComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID);
-    GLShaderCom* shader_com = (GLShaderCom*)Flux::getComponent(Flux::Resources::rctx, mesh->shader_resource, GLShaderComponentID);
+    GLMeshCom* mesh_com = (GLMeshCom*)Flux::getComponent(&Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID);
+    GLShaderCom* shader_com = (GLShaderCom*)Flux::getComponent(&Flux::Resources::rctx, mesh->shader_resource, GLShaderComponentID);
+    Flux::Transform::TransformCom* trans_com = (Flux::Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+
+    // TODO: Probably put this in a better place
+    // And do it in a better way
 
     glUseProgram(shader_com->shader_program);
+
+    int loc = glGetUniformLocation(shader_com->shader_program, "model_view");
+    auto mvp = projection * trans_com->model_view;
+    glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(mvp));
+
     glBindVertexArray(mesh_com->VAO);
     glDrawElements(GL_TRIANGLES, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
@@ -283,4 +321,92 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
 int Flux::GLRenderer::addGLRenderer(ECSCtx *ctx)
 {
     return Flux::addSystemBack(ctx, sysGlRenderer, false);
+}
+
+void showFPS(GLFWwindow* window)
+{
+    static double previousSeconds = 0.0;
+    static int frameCount = 0;
+    double elapsedSeconds;
+    double currentSeconds = glfwGetTime(); // Time since start (s)
+
+    elapsedSeconds = currentSeconds - previousSeconds;
+
+    // Limit text update to 4/second
+    if (elapsedSeconds > 0.25) {
+        previousSeconds = currentSeconds;
+        double fps = (double)frameCount / elapsedSeconds;
+        double msPerFrame = 1000.0 / fps;
+
+        std::ostringstream outs;
+        outs.precision(3); // Set precision of numbers
+
+        outs << std::fixed << "FluxTest" << " - " << "FPS: " << fps << " Frame time: " << msPerFrame << "ms";
+
+        glfwSetWindowTitle(window, outs.str().c_str());
+
+        // Reset frame count
+        frameCount = 0;
+    }
+
+    frameCount ++;
+}
+
+// std::map<std::string, int> uniform_locations;
+
+// GLint Flux::GLRenderer::getUniformLocation(const std::string name) 
+// {
+//     std::map<std::string, GLint>::iterator it = uniform_locations.find(name);
+//     if (it == uniform_locations.end())
+//     {
+//         uniform_locations[name] = glGetUniformLocation(handle, name.c_str());
+//     }
+
+//     return uniform_locations[name];
+//     // return glGetUniformLocation(handle, name.c_str());
+// }
+
+int getUniformLocation(const std::string& name)
+{
+    LOG_WARN("This is currently broken");
+    return -1;
+}
+
+void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec2& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform2f(loc, v.x, v.y);
+}
+void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec3& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform3f(loc, v.x, v.y, v.z);
+}
+void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec4& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform4f(loc, v.x, v.y, v.z, v.w);
+}
+void Flux::GLRenderer::setUniform(const std::string& name, const glm::mat4& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(v));
+}
+
+void Flux::GLRenderer::setUniform(const std::string& name, const int& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform1i(loc, v);
+}
+
+void Flux::GLRenderer::setUniform(const std::string& name, const float& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform1f(loc, v);
+}
+
+void Flux::GLRenderer::setUniform(const std::string& name, const bool& v)
+{
+    GLint loc = getUniformLocation(name);
+    glUniform1i(loc, v);
 }

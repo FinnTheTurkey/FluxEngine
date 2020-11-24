@@ -12,10 +12,10 @@ namespace Flux { namespace Threads
     struct ThreadCtx
     {
         /** Tells the thread when it should stop */
-        bool alive;
+        volatile bool alive;
 
         /** Tells the threads if they should be executing */
-        bool executing;
+        volatile bool executing;
 
         /** Which systems need to be run */
         System* system;
@@ -35,7 +35,7 @@ namespace Flux { namespace Threads
         int threads;
 
         /** Dynamically allocated array. This is how threads tell the main thread that they're done. */
-        bool* done;
+        volatile bool* done;
     };
 
     /** Creates a threading context, as well as an optimal number of worker threads */

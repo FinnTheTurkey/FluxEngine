@@ -3,6 +3,7 @@
 
 // Flux includes
 #include "Flux/ECS.hh"
+#include "glm/fwd.hpp"
 
 // GL includes
 #include <bits/stdint-uintn.h>
@@ -57,6 +58,11 @@ namespace Flux { namespace GLRenderer {
     };
 
     /**
+    Returns the time since the window was created, in seconds
+    */
+    double getTime();
+
+    /**
     Creates the window, and the GL context.
     For the GLRenderer, there can only be one context, so it is stored globally
     */
@@ -86,8 +92,17 @@ namespace Flux { namespace GLRenderer {
     */
     int addGLRenderer(ECSCtx* ctx);
 
-    // TODO: Cleanup OpenGL objects
-    // With "remove GL renderer" function
+    /**
+    Sets the value of a uniform
+    */
+    // TODO: Something with these
+    void setUniform(const std::string& name, const glm::vec2& v);
+    void setUniform(const std::string& name, const glm::vec3& v);
+    void setUniform(const std::string& name, const glm::vec4& v);
+    void setUniform(const std::string& name, const glm::mat4& v);
+    void setUniform(const std::string& name, const int& v);
+    void setUniform(const std::string& name, const float& v);
+    void setUniform(const std::string& name, const bool& v);
 
 }}
 

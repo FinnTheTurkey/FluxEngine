@@ -1,12 +1,13 @@
 #include "Flux/Threads.hh"
 #include "Flux/ECS.hh"
+#include "Flux/Log.hh"
 
 #include <thread>
 
 using namespace Flux::Threads;
 
 /** Store the threads so we can properly dispose of them */
-std::vector<std::thread> worker_threads;
+static std::vector<std::thread> worker_threads;
 
 
 // Helper functions
@@ -18,7 +19,7 @@ ThreadCtx* Flux::Threads::startThreads()
     ThreadCtx* tctx = new ThreadCtx;
 
     // Create worker threads
-    int num_threads = std::thread::hardware_concurrency();
+    unsigned long num_threads = std::thread::hardware_concurrency();
     if (num_threads == 0)
     {
         // Default to 4 threads
@@ -118,8 +119,8 @@ void workerThread(ThreadCtx* tctx, int id)
     {
         // Wait until called
         while ((tctx->executing == false || tctx->done[id] == true) && tctx->alive == true) {
-            
-        };
+
+        }
 
         if (tctx->alive == false)
         {

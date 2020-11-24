@@ -91,7 +91,7 @@ namespace Flux
     // ===============================================
 
     /** The function that starts everything. It returns an empty Entity Component System */
-    ECSCtx* createContext();
+    ECSCtx createContext();
 
     /**
     Destroyes ECS and frees memory.

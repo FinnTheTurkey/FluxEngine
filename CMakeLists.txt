@@ -5,6 +5,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CTest)
 enable_testing()
 
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Weverything")
+
+if (FLUX_GCC_PROFILE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+endif()
+
+add_compile_definitions(FLUX_NO_THREADING)
+
 add_library(FluxEngine 
 # Headers
 # ===================
@@ -28,6 +37,7 @@ Src/Res/Resources.cc
 
 # Renderer source files
 Src/Renderer/Renderer.cc
+Src/Renderer/Transform.cc
 Src/OpenGL/GLRenderer.cc
 )
 

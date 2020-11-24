@@ -29,7 +29,7 @@ namespace Flux { namespace Resources {
     /**
     The ECS that powers the resource system
     */
-    extern ECSCtx* rctx;
+    extern ECSCtx rctx;
 
     /**
     Setup the resource system

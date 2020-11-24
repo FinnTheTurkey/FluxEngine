@@ -20,10 +20,12 @@ int main(int argc, char *argv[], char *envp[])
     init();
 
     // Mainloop
+    float last_time = Flux::GLRenderer::getTime();
     while (Flux::GLRenderer::startFrame())
     {
-        // TODO: Delta
-        loop(1);
+        float delta = (Flux::GLRenderer::getTime() - last_time);
+        last_time = Flux::GLRenderer::getTime();
+        loop(delta);
         Flux::GLRenderer::endFrame();
     }
 
@@ -33,5 +35,8 @@ int main(int argc, char *argv[], char *envp[])
     // Doesn't cause a segfault cause the window is gone
     Flux::Resources::destroyResources();
     Flux::GLRenderer::destroyWindow();
+
+    #ifndef FLUX_NO_THREADING
     Flux::Threads::destroyThreads(Flux::threading_context);
+    #endif
 }
