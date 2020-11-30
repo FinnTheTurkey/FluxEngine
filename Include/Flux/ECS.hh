@@ -13,6 +13,14 @@
 #define FLUX_MAX_SYSTEMS 256
 #endif 
 
+#ifndef FLUX_MAX_DESTRUCTION_QUEUE
+#define FLUX_MAX_DESTRUCTION_QUEUE 256
+#endif 
+
+#ifndef FLUX_MAX_SYSTEM_QUEUE
+#define FLUX_MAX_SYSTEM_QUEUE 256
+#endif 
+
 // STL includes
 #include <queue>
 #include <string>
@@ -76,6 +84,22 @@ namespace Flux
         int system_count;
         int id_count;
 
+        // Queues
+        // ===================
+
+        /** Array of Entities to be destroyed */
+        int destruction_queue[FLUX_MAX_DESTRUCTION_QUEUE];
+
+        /** Number of Entities currently in the destruction queue */
+        int destruction_count;
+
+        /** Array of Systems to be run. They will be run after the current system is finished, or,
+         if not called from a system, the next time a system is run */
+        int system_queue[FLUX_MAX_SYSTEM_QUEUE];
+
+        /** Number of Entities in the system queue */
+        int system_queue_count;
+
         // Reuse section
         // ===================
 
@@ -91,7 +115,7 @@ namespace Flux
     // ===============================================
 
     /** The function that starts everything. It returns an empty Entity Component System */
-    ECSCtx createContext();
+    ECSCtx* createContext();
 
     /**
     Destroyes ECS and frees memory.
@@ -113,6 +137,18 @@ namespace Flux
     Its EntityID will be reused, so be sure to remove all references to it
     */
     bool destroyEntity(ECSCtx* ctx, EntityID entity);
+
+    /**
+    Queues an Entity for destruction. It will be destroyed at the end of runAllSystems,
+    or if destroyQueuedEntities() is called
+    */
+    bool queueDestroyEntity(ECSCtx* ctx, EntityID entity);
+
+    /**
+    Destroyes all the entities in the destruction queue
+    */
+    bool destroyQueuedEntities(ECSCtx* ctx);
+
 
     /**
     Gets the entity from the context, and returns it to you as a pointer
@@ -164,6 +200,10 @@ namespace Flux
     // System Section
     // ===============================================
 
+    /**
+    Adds a system to the ECS. This system will not be run unless explicitly called.
+    */
+    int addSystem(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded=true);
 
     /**
      * Adds a system to the system queue.
@@ -195,9 +235,21 @@ namespace Flux
     void runSystems(ECSCtx* ctx, float delta);
 
     /**
-    Runs a single system
+    Runs a single system.
+    Disable run_queue if you do not want any queued systems to be run before this one
     */
-    void runSystem(ECSCtx *ctx, SystemID sys, float delta);
+    void runSystem(ECSCtx* ctx, SystemID sys, float delt, bool run_queue = true);
+
+    /**
+    Adds a system to the run queue. It will be run after the current system is done, 
+    or before a new system is run.
+    */
+    void queueRunSystem(ECSCtx* ctx, SystemID system);
+
+    /**
+    Runs the queued systems. Primarily intended for internal use.
+    */
+    void runQueuedSystems(ECSCtx* ctx, float delta);
 
 };
 

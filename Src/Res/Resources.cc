@@ -6,16 +6,16 @@
 #include <map>
 #include <string>
 
-Flux::ECSCtx Flux::Resources::rctx;
+Flux::ECSCtx* Flux::Resources::rctx = nullptr;
 
 Flux::ComponentTypeID ResourceComponentType;
 
 void Flux::Resources::initialiseResources()
 {
-    // if (rctx != nullptr)
-    // {
-    //     LOG_WARN("Tryied to initialize Resource system twice!");
-    // }
+    if (rctx != nullptr)
+    {
+        LOG_WARN("Tryied to initialize Resource system twice!");
+    }
     rctx = Flux::createContext();
     
     ResourceComponentType = Flux::getComponentType("resource");
@@ -23,25 +23,25 @@ void Flux::Resources::initialiseResources()
 
 void Flux::Resources::destroyResources()
 {
-    Flux::destroyContext(&rctx);
+    Flux::destroyContext(rctx);
 }
 
 Flux::Resources::ResourceID Flux::Resources::createResource(Resource *res)
 {
-    ResourceID res_id = Flux::createEntity(&rctx);
-    Flux::addComponent(&rctx, res_id, ResourceComponentType, res);
+    ResourceID res_id = Flux::createEntity(rctx);
+    Flux::addComponent(rctx, res_id, ResourceComponentType, res);
 
     return res_id;
 }
 
 void Flux::Resources::removeResource(ResourceID res)
 {
-    Flux::destroyEntity(&rctx, res);
+    Flux::destroyEntity(rctx, res);
 }
 
 Flux::Resources::Resource* Flux::Resources::getResource(ResourceID res)
 {
-    return (Resource*)Flux::getComponent(&rctx, res, ResourceComponentType);
+    return (Resource*)Flux::getComponent(rctx, res, ResourceComponentType);
 }
 
 // https://stackoverflow.com/a/26822961/7179625

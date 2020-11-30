@@ -2,9 +2,10 @@
 #define FLUX_RESOURCES_HH
 #include <fstream>
 #include <string>
-#ifndef FLUX_MAX_RESOURCES
-#define FLUX_MAX_RESOURCES 4096
-#endif
+
+// #ifndef FLUX_MAX_RESOURCES
+// #define FLUX_MAX_RESOURCES 4096
+// #endif
 
 // Flux includes
 #include "Flux/ECS.hh"
@@ -29,7 +30,7 @@ namespace Flux { namespace Resources {
     /**
     The ECS that powers the resource system
     */
-    extern ECSCtx rctx;
+    extern ECSCtx* rctx;
 
     /**
     Setup the resource system

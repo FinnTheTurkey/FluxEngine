@@ -5,7 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CTest)
 enable_testing()
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Weverything")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra") # -Weverything")
 
 if (FLUX_GCC_PROFILE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
@@ -13,6 +13,9 @@ if (FLUX_GCC_PROFILE)
 endif()
 
 add_compile_definitions(FLUX_NO_THREADING)
+
+# Make sure GLM always creates matricies with values that actually work
+add_compile_definitions(GLM_FORCE_CTOR_INIT)
 
 add_library(FluxEngine 
 # Headers
@@ -39,6 +42,9 @@ Src/Res/Resources.cc
 Src/Renderer/Renderer.cc
 Src/Renderer/Transform.cc
 Src/OpenGL/GLRenderer.cc
+
+# Source files for GLFW window
+Src/OpenGL/GLFW/GLFW.cc
 )
 
 target_include_directories(FluxEngine PUBLIC Include)

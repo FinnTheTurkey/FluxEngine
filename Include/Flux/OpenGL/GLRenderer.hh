@@ -6,9 +6,10 @@
 #include "glm/fwd.hpp"
 
 // GL includes
-#include <bits/stdint-uintn.h>
+// #include <bits/stdint-uintn.h>
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
+// #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 // STL includes
 #include <string>
@@ -20,12 +21,19 @@ namespace Flux { namespace GLRenderer {
     */
     struct GLCtx
     {
-        GLFWwindow* window;
+        // GLFWwindow* window;
 
         int width;
         int height;
         std::string title;
+
+        int mouse_mode;
+
+        glm::vec2 offset;
+        glm::vec2 mouse_pos;
     };
+
+    extern GLCtx* current_window;
 
     /**
     Component where GLRenderer stores all GL-related data
@@ -47,6 +55,27 @@ namespace Flux { namespace GLRenderer {
     {
         // Shader stuff
         uint32_t shader_program;
+
+        // Special high priority uniform locations
+        uint32_t mvp_location;
+    };
+
+    /**
+    Component that keeps track of uniform positions.
+    */
+    struct GLUniformCom: Component
+    {
+        // More info: Open GL 4 Shading Language Cookbook, page 57
+
+        int block_size;
+
+        std::vector<uint32_t> indices;
+
+        std::vector<int> offset;
+
+        /** OpenGL handle for the uniform buffer */
+        uint32_t handle;
+
     };
 
     /**
@@ -58,15 +87,15 @@ namespace Flux { namespace GLRenderer {
     };
 
     /**
-    Returns the time since the window was created, in seconds
-    */
-    double getTime();
-
-    /**
     Creates the window, and the GL context.
     For the GLRenderer, there can only be one context, so it is stored globally
     */
     void createWindow(const int& width, const int& height, const std::string& title);
+
+    /**
+    Sets up the OpenGL context
+    */
+    void _startGL();
 
     /**
     Close the current window, and free all it's resources
@@ -79,6 +108,16 @@ namespace Flux { namespace GLRenderer {
     If this function returns true, then the frame can be drawn. If it returns false, the window has been destroyed
     */
     bool startFrame();
+
+    /**
+    The windowing system's part of starting a frame
+    */
+    bool _windowStartFrame();
+
+    /**
+    The windowing system's part of ending a frame
+    */
+    void _windowEndFrame();
     
     /**
     Tells the renderer that the frame is over
@@ -96,13 +135,7 @@ namespace Flux { namespace GLRenderer {
     Sets the value of a uniform
     */
     // TODO: Something with these
-    void setUniform(const std::string& name, const glm::vec2& v);
-    void setUniform(const std::string& name, const glm::vec3& v);
-    void setUniform(const std::string& name, const glm::vec4& v);
-    void setUniform(const std::string& name, const glm::mat4& v);
-    void setUniform(const std::string& name, const int& v);
-    void setUniform(const std::string& name, const float& v);
-    void setUniform(const std::string& name, const bool& v);
+    
 
 }}
 

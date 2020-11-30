@@ -1,4 +1,5 @@
-#define GLM_FORCE_CTOR_INIT
+#include <cstdlib>
+#include <cstring>
 #include "Flux/Renderer.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Resources.hh"
@@ -54,11 +55,22 @@ Resources::ResourceID Flux::Renderer::createShaderResource(const std::string &ve
     return Resources::createResource(sr);
 }
 
-void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID mesh, Resources::ResourceID shaders)
+Resources::ResourceID Renderer::createMaterialResource(Resources::ResourceID shader_resource)
+{
+    auto mr = new MaterialRes;
+    mr->shaders = shader_resource;
+    mr->uniforms = std::map<std::string, Uniform>();
+    mr->changed = true;
+
+    return Resources::createResource(mr);
+}
+
+void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID mesh, Resources::ResourceID mat)
 {
     auto mc = new MeshCom;
     mc->mesh_resource = mesh;
-    mc->shader_resource = shaders;
+    // mc->shader_resource = shaders;
+    mc->mat_resource = mat;
 
     if (MeshComponentID == -1)
     {
@@ -69,7 +81,134 @@ void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID
 
     Flux::Transform::TransformCom* tc = new Flux::Transform::TransformCom;
     tc->transformation = glm::mat4();
+    tc->has_parent = false;
 
     Flux::addComponent(ctx, entity, MeshComponentID, mc);
     Flux::addComponent(ctx, entity, TransformComponentID, tc);
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec2& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Vector2;
+
+    // Allocate enw memory, and copy value into it
+    glm::vec2* value = (glm::vec2*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec3& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Vector3;
+
+    // Allocate enw memory, and copy value into it
+    glm::vec3* value = (glm::vec3*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec4& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Vector4;
+
+    // Allocate enw memory, and copy value into it
+    glm::vec4* value = (glm::vec4*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const float& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Float;
+
+    // Allocate enw memory, and copy value into it
+    float* value = (float*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const int& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Int;
+
+    // Allocate enw memory, and copy value into it
+    int* value = (int*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const bool& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Int;
+
+    // Allocate enw memory, and copy value into it
+    bool* value = (bool*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::mat4& v)
+{
+    auto mr = (MaterialRes*)Resources::getResource(res);
+
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Mat4;
+
+    // Allocate enw memory, and copy value into it
+    glm::mat4* value = (glm::mat4*)std::malloc(sizeof(v));
+    std::memcpy(value, &v, sizeof(v));
+
+    us.value = value;
+
+    mr->uniforms[name] = us;
+    mr->changed = true;
 }
