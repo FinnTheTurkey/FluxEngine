@@ -5,6 +5,7 @@ This file is where all the windowing related stuff will be stored for the GLFW b
 #include "Flux/Log.hh"
 #include "Flux/OpenGL/GLRenderer.hh"
 #include "Flux/Input.hh"
+#include "Flux/Flux.hh"
 
 // #include <glad/glad.h>
 #include "Flux/Renderer.hh"
@@ -176,6 +177,22 @@ void handleInputs()
     old_position.y = y;
 }
 
+void (*func)();
+
+void Flux::setMainLoopFunction(void (*fun)())
+{
+    func = fun;
+    
+}
+
+void Flux::runMainloop()
+{
+    while (!glfwWindowShouldClose(w->window))
+    {
+        func();
+    }
+}
+
 bool Flux::GLRenderer::_windowStartFrame()
 {
     bool sc = glfwWindowShouldClose(w->window);
@@ -271,12 +288,12 @@ void Flux::Input::setMouseMode(Input::MouseMode mode)
     current_window->mouse_mode = mode;
 }
 
-glm::vec2 Flux::Input::getMouseOffset()
+glm::vec2& Flux::Input::getMouseOffset()
 {
     return current_window->offset;
 }
 
-glm::vec2 Flux::Input::getMousePosition()
+glm::vec2& Flux::Input::getMousePosition()
 {
     return current_window->mouse_pos;
 }

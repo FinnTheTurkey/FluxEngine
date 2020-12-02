@@ -6,9 +6,7 @@
 #include "glm/fwd.hpp"
 
 // GL includes
-// #include <bits/stdint-uintn.h>
 #include <glad/glad.h>
-// #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
 // STL includes

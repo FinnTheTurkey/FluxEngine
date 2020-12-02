@@ -14,21 +14,27 @@
 // Flux::Threads::ThreadCtx* Flux::threading_context = Flux::Threads::startThreads();
 // #endif
 
+float last_time;
+
+void mainloop()
+{
+    Flux::GLRenderer::startFrame();
+    float delta = (Flux::Renderer::getTime() - last_time);
+    last_time = Flux::Renderer::getTime();
+    loop(delta);
+    Flux::GLRenderer::endFrame();
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     Flux::Resources::initialiseResources();
     Flux::GLRenderer::createWindow(800, 600, "Hello Flux");
-    init();
+    last_time = Flux::Renderer::getTime();
+    Flux::setMainLoopFunction(mainloop);
+    init(argc, argv);
 
     // Mainloop
-    float last_time = Flux::Renderer::getTime();
-    while (Flux::GLRenderer::startFrame())
-    {
-        float delta = (Flux::Renderer::getTime() - last_time);
-        last_time = Flux::Renderer::getTime();
-        loop(delta);
-        Flux::GLRenderer::endFrame();
-    }
+    Flux::runMainloop();
 
     end();
 

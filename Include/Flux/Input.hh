@@ -58,6 +58,7 @@
 /* Function keys */
 #define FLUX_KEY_ESCAPE             256
 #define FLUX_KEY_ENTER              257
+#define FLUX_KEY_RETURN             257
 #define FLUX_KEY_TAB                258
 #define FLUX_KEY_BACKSPACE          259
 #define FLUX_KEY_INSERT             260
@@ -157,10 +158,10 @@ namespace Flux { namespace Input {
     bool isMouseButtonPressed(int button);
 
     /** Get absolute position of the mouse */
-    glm::vec2 getMousePosition();
+    glm::vec2& getMousePosition();
 
     /** Get mouse offset since last frame */
-    glm::vec2 getMouseOffset();
+    glm::vec2& getMouseOffset();
 
     /** Get scroll wheel offset since last frame */
     float getScrollWheelOffset();

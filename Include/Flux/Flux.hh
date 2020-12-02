@@ -12,9 +12,13 @@
 namespace Flux
 {
     extern Threads::ThreadCtx* threading_context;
+
+    void setMainLoopFunction(void (*fun)());
+
+    void runMainloop();
 }
 
-void init();
+void init(int argc, char *argv[]);
 
 void loop(float delta);
 
