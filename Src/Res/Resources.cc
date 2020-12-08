@@ -8,41 +8,37 @@
 
 Flux::ECSCtx* Flux::Resources::rctx = nullptr;
 
-Flux::ComponentTypeID ResourceComponentType;
-
 void Flux::Resources::initialiseResources()
 {
     if (rctx != nullptr)
     {
         LOG_WARN("Tryied to initialize Resource system twice!");
     }
-    rctx = Flux::createContext();
-    
-    ResourceComponentType = Flux::getComponentType("resource");
+    rctx = new ECSCtx();
 }
 
 void Flux::Resources::destroyResources()
 {
-    Flux::destroyContext(rctx);
+    rctx->destroyAllEntities();
 }
 
-Flux::Resources::ResourceID Flux::Resources::createResource(Resource *res)
-{
-    ResourceID res_id = Flux::createEntity(rctx);
-    Flux::addComponent(rctx, res_id, ResourceComponentType, res);
+// Flux::Resources::ResourceRef Flux::Resources::createResource(Resource *res)
+// {
+//     ResourceID res_id = Flux::createEntity(rctx);
+//     Flux::addComponent(rctx, res_id, ResourceComponentType, res);
 
-    return res_id;
-}
+//     return res_id;
+// }
 
-void Flux::Resources::removeResource(ResourceID res)
-{
-    Flux::destroyEntity(rctx, res);
-}
+// void Flux::Resources::removeResource(ResourceID res)
+// {
+//     Flux::destroyEntity(rctx, res);
+// }
 
-Flux::Resources::Resource* Flux::Resources::getResource(ResourceID res)
-{
-    return (Resource*)Flux::getComponent(rctx, res, ResourceComponentType);
-}
+// Flux::Resources::Resource* Flux::Resources::getResource(ResourceID res)
+// {
+//     return (Resource*)Flux::getComponent(rctx, res, ResourceComponentType);
+// }
 
 // https://stackoverflow.com/a/26822961/7179625
 size_t find_ext_idx(const std::string& filename)
@@ -72,7 +68,7 @@ void Flux::Resources::addFileLoader(const std::string &ext, Flux::Resources::Res
     extension_db[ext] = function;
 }
 
-Flux::Resources::ResourceID Flux::Resources::loadResourceFromFile(const std::string &filename)
+Flux::Resources::ResourceRef<Flux::Resources::Resource> Flux::Resources::_loadResourceFromFile(const std::string &filename)
 {
     std::string extension = get_file_ext(filename);
 
@@ -80,7 +76,7 @@ Flux::Resources::ResourceID Flux::Resources::loadResourceFromFile(const std::str
     {
         // Use function from extensiondb
         std::ifstream* myfile = new std::ifstream(filename);
-        ResourceID id = createResource(extension_db[extension](myfile));
+        ResourceRef<Resource> id = createResource<Resource>(extension_db[extension](myfile));
 
         myfile->close();
         delete myfile;
@@ -90,7 +86,7 @@ Flux::Resources::ResourceID Flux::Resources::loadResourceFromFile(const std::str
     {
         // Use text resource
         std::ifstream* myfile = new std::ifstream(filename);
-        ResourceID id = createResource(ext_createTextResource(myfile));
+        ResourceRef<Resource> id = createResource<Resource>(ext_createTextResource(myfile));
 
         myfile->close();
         delete myfile;
@@ -98,7 +94,7 @@ Flux::Resources::ResourceID Flux::Resources::loadResourceFromFile(const std::str
     }
 }
 
-Flux::Resources::ResourceID Flux::Resources::createTextResource(const std::string& text)
+Flux::Resources::ResourceRef<Flux::Resources::TextResource> Flux::Resources::createTextResource(const std::string& text)
 {
     auto tr = new TextResource;
     tr->content = text;

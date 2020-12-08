@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(FluxEngine VERSION 0.1.0)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set( CMAKE_CXX_STANDARD 14 )
 
 include(CTest)
 enable_testing()
@@ -35,7 +36,7 @@ add_library(FluxEngine
 Include/Flux/Flux.hh
 Include/Flux/ECS.hh
 Include/Flux/Log.hh
-Include/Flux/Threads.hh
+# Include/Flux/Threads.hh
 Include/Flux/Resources.hh
 
 # Renderer headers
@@ -101,3 +102,9 @@ endif()
 # GLM
 add_subdirectory(ThirdParty/glm)
 target_link_libraries(FluxEngine PUBLIC glm)
+
+# LZ4
+# Not using it's CMake because it's overcomplicated
+add_library(lz4 STATIC ThirdParty/lz4/lib/lz4.c ThirdParty/lz4/lib/lz4hc.c)
+target_include_directories(lz4 PUBLIC ThirdParty/lz4/lib)
+target_link_libraries(FluxEngine PUBLIC lz4)

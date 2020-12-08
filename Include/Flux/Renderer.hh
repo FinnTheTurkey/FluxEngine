@@ -50,39 +50,6 @@ namespace Flux { namespace Renderer {
         uint32_t indices_length;
     };
 
-    /**
-    Simple component that holds a MeshRes
-    */
-    struct MeshCom: Component
-    {
-        /**
-        ID of the mesh resource.
-        **NOTE:** If this is _not_ a mesh resource, the program will crash horrible
-        */
-        Resources::ResourceID mesh_resource;
-
-        /**
-        ID of the shader resource.
-        **NOTE:** If this is _not_ a shader resource, the program will crash horrible
-        */
-        // Resources::ResourceID shader_resource;
-
-        /**
-        ID of the material resource.
-        **NOTE:** If this is _not_ a material resource, the program will crash horrible
-        */
-        Resources::ResourceID mat_resource;
-    };
-
-    /**
-    Temporary component for shaders until I write the resource system
-    */
-    struct temp_ShaderCom: Component
-    {
-        std::string vert_src;
-        std::string frag_src;
-    };
-
     enum UniformType
     {
         Int, Float, Vector2, Vector3, Vector4, Mat4, Bool
@@ -106,43 +73,76 @@ namespace Flux { namespace Renderer {
     */
     struct MaterialRes: Resources::Resource
     {
-        Resources::ResourceID shaders;
+        Resources::ResourceRef<ShaderRes> shaders;
         std::map<std::string, Uniform> uniforms;
         bool changed;
     };
 
     /**
+    Simple component that holds a MeshRes
+    */
+    struct MeshCom: Component
+    {
+        /**
+        ID of the mesh resource.
+        **NOTE:** If this is _not_ a mesh resource, the program will crash horrible
+        */
+        Resources::ResourceRef<MeshRes> mesh_resource;
+
+        /**
+        ID of the shader resource.
+        **NOTE:** If this is _not_ a shader resource, the program will crash horrible
+        */
+        // Resources::ResourceID shader_resource;
+
+        /**
+        ID of the material resource.
+        **NOTE:** If this is _not_ a material resource, the program will crash horrible
+        */
+        Resources::ResourceRef<MaterialRes> mat_resource;
+    };
+
+    /**
+    Temporary component for shaders until I write the resource system
+    */
+    struct temp_ShaderCom: Component
+    {
+        std::string vert_src;
+        std::string frag_src;
+    };
+
+    /**
     Set a uniform in a uniform Resource
     */
-    void setUniform(Resources::ResourceID res, const std::string& name, const glm::vec2& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const glm::vec3& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const glm::vec4& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const glm::mat4& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const int& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const float& v);
-    void setUniform(Resources::ResourceID res, const std::string& name, const bool& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec2& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec3& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec4& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::mat4& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const int& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const float& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const bool& v);
 
     /**
     Links a mesh to an entity. Takes a MeshRes, a ShaderRes, and a MaterialRes.
     Also adds a transformation component
     */
-    void addMesh(ECSCtx* ctx, EntityID entity, Resources::ResourceID mesh, Resources::ResourceID material);
+    void addMesh(EntityRef entity, Resources::ResourceRef<MeshRes> mesh, Resources::ResourceRef<MaterialRes> material);
 
     /**
     Creates a shader resource from 2 text files.
     TODO: Use proper file loading system
     */
-    Resources::ResourceID createShaderResource(const std::string& vert, const std::string& frag);
+    Resources::ResourceRef<ShaderRes> createShaderResource(const std::string& vert, const std::string& frag);
 
     /**
     Adds a material resource. This takes shaders
     */
-    Resources::ResourceID createMaterialResource(Resources::ResourceID shader_resource);
+    Resources::ResourceRef<MaterialRes> createMaterialResource(Resources::ResourceRef<ShaderRes> shader_resource);
 
     /**
     Temporary function for adding the temporary shader component
     */
-    void temp_addShaders(ECSCtx* ctx, EntityID entity, const std::string& vert_fname, const std::string& frag_fname);
+    // void temp_addShaders(ECSCtx* ctx, EntityID entity, const std::string& vert_fname, const std::string& frag_fname);
 
     /**
     Returns the time since the window was created, in seconds
@@ -162,7 +162,7 @@ namespace Transform
         glm::mat4 model_view;
 
         bool has_parent;
-        EntityID parent;
+        EntityRef parent;
     };
 
     /**
@@ -176,22 +176,22 @@ namespace Transform
     /** 
     Sets an entity as a camera. Can be used on any entity with the Transfrom component
     */
-    void setCamera(ECSCtx* ctx, EntityID entity);
+    void setCamera(EntityRef entity);
 
     /**
     Rotates an entity with the transform component
     */
-    void rotate(ECSCtx* ctx, EntityID entity, const glm::vec3& axis, const float& angle_rad);
+    void rotate(EntityRef entity, const glm::vec3& axis, const float& angle_rad);
 
     /**
     Move (or translates) an entity by offset
     */
-    void translate(ECSCtx *ctx, EntityID entity, const glm::vec3& offset);
+    void translate(EntityRef entity, const glm::vec3& offset);
 
     /**
     Scales an entity by the given scalar
     */
-    void scale(ECSCtx* ctx, EntityID entity, const glm::vec3& scalar);
+    void scale(EntityRef entity, const glm::vec3& scalar);
 
     // Euler Transformations
     // ========================================
@@ -199,12 +199,12 @@ namespace Transform
     /**
     Get the current translation (in local space if parented)
     */
-    glm::vec3 getTranslation(ECSCtx* ctx, EntityID entity);
+    glm::vec3 getTranslation(EntityRef entity);
 
     /**
     Set the current translation (in local space if parented)
     */
-    void setTranslation(ECSCtx* ctx, EntityID entity, const glm::vec3& translation);
+    void setTranslation(EntityRef entity, const glm::vec3& translation);
 
     // TODO: Setters for translation and scale
 
@@ -213,19 +213,33 @@ namespace Transform
     */
     void addTransformSystems(ECSCtx* ctx);
 
+    class TransformationSystem: public System
+    {
+        void runSystem(EntityRef entity, float delta) override;
+    };
+
+    class CameraSystem: public System
+    {
+        void runSystem(EntityRef entity, float delta) override;
+    };
+
     /**
     Add a parent entity to the given entity.
     This means that the given entity's transformation is not in it's parent's local space.
     **WARNING: ** If the parent Entity is deleted, this Entity will **not know**, and will probably segfault
     */
-    void setParent(ECSCtx* ctx, EntityID entity, EntityID parent);
+    void setParent(EntityRef entity, EntityRef parent);
 
     /**
     If the given Entity has a parent, remove it
     */
-    void removeParent(ECSCtx* ctx, EntityID entity);
+    void removeParent(EntityRef entity);
 
 }
 }
+
+FLUX_DEFINE_COMPONENT(Flux::Transform::TransformCom, transform);
+FLUX_DEFINE_COMPONENT(Flux::Transform::CameraCom, camera);
+FLUX_DEFINE_COMPONENT(Flux::Renderer::MeshCom, mesh);
 
 #endif

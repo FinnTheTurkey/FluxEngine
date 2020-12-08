@@ -32,9 +32,9 @@ static Flux::ComponentTypeID GLUniformComponentID;
 
 
 // Destructors
-void destructorGLMesh(Flux::ECSCtx* ctx, Flux::EntityID entity)
+void destructorGLMesh(Flux::EntityRef entity)
 {
-    GLMeshCom* com = (GLMeshCom*)Flux::getComponent(ctx, entity, GLMeshComponentID);
+    GLMeshCom* com = entity.getComponent<GLMeshCom>();
 
     // glDeleteProgram(com->shader_program);
     glDeleteBuffers(1, &com->VAO);
@@ -42,9 +42,9 @@ void destructorGLMesh(Flux::ECSCtx* ctx, Flux::EntityID entity)
     glDeleteVertexArrays(1, &com->VAO);
 }
 
-void destructorGLShader(Flux::ECSCtx* ctx, Flux::EntityID entity)
+void destructorGLShader(Flux::EntityRef entity)
 {
-    GLShaderCom* com = (GLShaderCom*)Flux::getComponent(ctx, entity, GLShaderComponentID);
+    GLShaderCom* com = entity.getComponent<GLShaderCom>();
 
     glDeleteProgram(com->shader_program);
     // glDeleteBuffers(1, &com->VAO);
@@ -60,17 +60,18 @@ void Flux::GLRenderer::_startGL()
     glViewport(0, 0, current_window->width, current_window->height);
 
     // Load IDs for components
-    MeshComponentID = Flux::getComponentType("mesh");
-    TransformComponentID = Flux::getComponentType("transform");
-    GLMeshComponentID = Flux::getComponentType("gl_mesh");
-    GLEntityComponentID = Flux::getComponentType("gl_entity");
-    TempShaderComponentID = Flux::getComponentType("temp_shader");
-    GLShaderComponentID = Flux::getComponentType("gl_shader");
-    GLUniformComponentID = Flux::getComponentType("gl_uniform");
+    // MeshComponentID = Flux::getComponentType("mesh");
+    // TransformComponentID = Flux::getComponentType("transform");
+    // GLMeshComponentID = Flux::getComponentType("gl_mesh");
+    // GLEntityComponentID = Flux::getComponentType("gl_entity");
+    // TempShaderComponentID = Flux::getComponentType("temp_shader");
+    // GLShaderComponentID = Flux::getComponentType("gl_shader");
+    // GLUniformComponentID = Flux::getComponentType("gl_uniform");
 
     // Setup destructors
-    Flux::setComponentDestructor(GLMeshComponentID, destructorGLMesh);
-    Flux::setComponentDestructor(GLShaderComponentID, destructorGLShader);
+    // TODO: Do this a better way, probably with templates
+    Flux::setComponentDestructor<GLMeshCom>(destructorGLMesh);
+    Flux::setComponentDestructor<GLShaderCom>(destructorGLShader);
 }
 
 bool Flux::GLRenderer::startFrame()
@@ -91,10 +92,10 @@ void Flux::GLRenderer::endFrame()
 static glm::mat4 projection;
 
 
-void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Renderer::MaterialRes* mat_res, GLShaderCom* shader_res)
+void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res)
 {
     bool create = false;
-    if (!Flux::hasComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID))
+    if (!mesh->mat_resource.getBaseEntity().hasComponent<GLUniformCom>())
     {
         // Create the uniform buffer
         create = true;
@@ -133,11 +134,13 @@ void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Renderer::MaterialRes
             uni->offset.resize(count);
             glGetActiveUniformsiv(shader_res->shader_program, count, &uni->indices[0], GL_UNIFORM_OFFSET, &uni->offset[0]);
 
-            Flux::addComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID, uni);
+            // Flux::addComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID, uni);
+            mesh->mat_resource.getBaseEntity().addComponent(uni);
         }
         else
         {
-            uni = (GLUniformCom*)Flux::getComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID);
+            // uni = (GLUniformCom*)Flux::getComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID);
+            uni = mesh->mat_resource.getBaseEntity().getComponent<GLUniformCom>();
         }
 
         // Create buffer for data
@@ -208,18 +211,18 @@ void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Renderer::MaterialRes
 
 }
 
-void initGLMaterial(Flux::Renderer::MeshCom* mesh)
+void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
 {
     // Step 1: Shaders
     // On the material
 
     // This large block of code adds shaders to the shader resource referenced
     // by the material resource if it doesn't already have them
-    auto mat_res = (Flux::Renderer::MaterialRes*)Flux::Resources::getResource(mesh->mat_resource);
-    if (!Flux::hasComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID))
+    auto mat_res = mesh->mat_resource;
+    if (!mat_res->shaders.getBaseEntity().hasComponent<GLShaderCom>())
     {
         // Find the resources
-        Flux::Renderer::ShaderRes* shader_res = (Flux::Renderer::ShaderRes*)Flux::Resources::getResource(mat_res->shaders);
+        auto shader_res = mat_res->shaders;
 
         // Create new component
         auto shader_com = new GLShaderCom;
@@ -286,24 +289,31 @@ void initGLMaterial(Flux::Renderer::MeshCom* mesh)
         glDeleteShader(fragment_shader);
 
         // Add to resource entity
-        Flux::addComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID, shader_com);
+        // Flux::addComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID, shader_com);
+        mat_res->shaders.getBaseEntity().addComponent(shader_com);
     }
 
     // Custom Uniforms
     // This creates a Uniform Buffer if one doesn't already exist
-    if (!Flux::hasComponent(Flux::Resources::rctx, mesh->mat_resource, GLShaderComponentID))
+    if (!mesh->mat_resource.getBaseEntity().hasComponent<GLShaderCom>())
     {
         // Make shaders active
-        GLShaderCom* shader_com = (GLShaderCom*)Flux::getComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID);
+        GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
         glUseProgram(shader_com->shader_program);
 
         dealWithUniforms(mesh, mat_res, shader_com);
     }
 }
 
-void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
+void GLRendererSystem::onSystemStart()
 {
-    if (entity == 0)
+    projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
+}
+
+void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
+{
+    // TODO: change (once systems are redone)
+    if (entity.getEntityID() == 0)
     {
         // First entity
         // Calcualte projection matrix
@@ -311,24 +321,24 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
         projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
     }
 
-    if (!Flux::hasComponent(ctx, entity, MeshComponentID))
+    if (!entity.hasComponent<Flux::Renderer::MeshCom>())
     {
         // Doesn't have a mesh - we don't care
         return;
     }
 
     // Get the mesh
-    Flux::Renderer::MeshCom* mesh = (Flux::Renderer::MeshCom*)Flux::getComponent(ctx, entity, MeshComponentID);
+    Flux::Renderer::MeshCom* mesh = entity.getComponent<Flux::Renderer::MeshCom>();
 
-    if (!Flux::hasComponent(ctx, entity, GLEntityComponentID))
+    if (!entity.hasComponent<GLEntityCom>())
     {
         // It hasn't been initialized yet
         // Make sure they don't already exist
-        if (!Flux::hasComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID))
+        if (!mesh->mesh_resource.getBaseEntity().hasComponent<GLMeshCom>())
         {
             
             // Get the resource
-            Flux::Renderer::MeshRes* mesh_res = (Flux::Renderer::MeshRes*)Flux::Resources::getResource(mesh->mesh_resource);
+            auto mesh_res = mesh->mesh_resource;
 
             // Create new component
             GLMeshCom* mesh_com = new GLMeshCom;
@@ -359,20 +369,21 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
             mesh_com->num_indices = mesh_res->indices_length;
 
             // Add to resource entity
-            Flux::addComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID, mesh_com);
+            // Flux::addComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID, mesh_com);
+            mesh->mesh_resource.getBaseEntity().addComponent(mesh_com);
         }
 
         initGLMaterial(mesh);
 
-        Flux::addComponent(ctx, entity, GLEntityComponentID, new GLEntityCom);
+        entity.addComponent(new GLEntityCom);
     }
 
-    auto mat_res = (Flux::Renderer::MaterialRes*)Flux::Resources::getResource(mesh->mat_resource);
+    auto mat_res = mesh->mat_resource;
 
     // Actually render
-    GLMeshCom* mesh_com = (GLMeshCom*)Flux::getComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID);
-    GLShaderCom* shader_com = (GLShaderCom*)Flux::getComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID);
-    Flux::Transform::TransformCom* trans_com = (Flux::Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    GLMeshCom* mesh_com = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
+    GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
+    Flux::Transform::TransformCom* trans_com = entity.getComponent<Flux::Transform::TransformCom>();
 
     // TODO: Probably put this in a better place
     // And do it in a better way
@@ -394,7 +405,7 @@ void sysGlRenderer(Flux::ECSCtx* ctx, Flux::EntityID entity, float delta)
 int Flux::GLRenderer::addGLRenderer(ECSCtx *ctx)
 {
     // LOG_INFO("Adding GL Renderer system");
-    return Flux::addSystemBack(ctx, sysGlRenderer, false);
+    return ctx->addSystemBack(new GLRendererSystem, false);
 }
 
 

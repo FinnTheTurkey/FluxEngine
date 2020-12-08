@@ -3,6 +3,7 @@
 
 // Flux includes
 #include "Flux/ECS.hh"
+#include "Flux/Renderer.hh"
 #include "glm/fwd.hpp"
 
 // GL includes
@@ -129,12 +130,27 @@ namespace Flux { namespace GLRenderer {
     */
     int addGLRenderer(ECSCtx* ctx);
 
-    /**
-    Sets the value of a uniform
-    */
-    // TODO: Something with these
+    class GLRendererSystem: public System
+    {
+    private:
+        void initGLMaterial(Flux::Renderer::MeshCom* mesh);
+        void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res);
+
+        glm::mat4 projection;
+
+    public:
+        void onSystemStart() override;
+
+        void runSystem(EntityRef entity, float delta) override;
+
+    };
     
 
 }}
+
+FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLMeshCom, gl_mesh);
+FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLShaderCom, gl_shader);
+FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLUniformCom, gl_uniform);
+FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLEntityCom, gl_entity);
 
 #endif

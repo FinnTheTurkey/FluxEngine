@@ -32,19 +32,19 @@ std::string temp_readFile(const std::string& filename)
     return output;
 }
 
-void Flux::Renderer::temp_addShaders(ECSCtx *ctx, EntityID entity, const std::string &vert_fname, const std::string &frag_fname)
-{
-    auto sc = new temp_ShaderCom;
+// void Flux::Renderer::temp_addShaders(ECSCtx *ctx, EntityID entity, const std::string &vert_fname, const std::string &frag_fname)
+// {
+//     auto sc = new temp_ShaderCom;
 
-    sc->frag_src = temp_readFile(frag_fname);
-    sc->vert_src = temp_readFile(vert_fname);
+//     sc->frag_src = temp_readFile(frag_fname);
+//     sc->vert_src = temp_readFile(vert_fname);
 
-    // This is extremely bad practice
-    // If this were not a temp function, I would not do this
-    Flux::addComponent(ctx, entity, getComponentType("temp_shader"), sc);
-}
+//     // This is extremely bad practice
+//     // If this were not a temp function, I would not do this
+//     Flux::addComponent(ctx, entity, getComponentType("temp_shader"), sc);
+// }
 
-Resources::ResourceID Flux::Renderer::createShaderResource(const std::string &vert, const std::string &frag)
+Resources::ResourceRef<Flux::Renderer::ShaderRes> Flux::Renderer::createShaderResource(const std::string &vert, const std::string &frag)
 {
     // TODO: Change later
     auto sr = new ShaderRes;
@@ -55,7 +55,7 @@ Resources::ResourceID Flux::Renderer::createShaderResource(const std::string &ve
     return Resources::createResource(sr);
 }
 
-Resources::ResourceID Renderer::createMaterialResource(Resources::ResourceID shader_resource)
+Resources::ResourceRef<Flux::Renderer::MaterialRes> Renderer::createMaterialResource(Resources::ResourceRef<ShaderRes> shader_resource)
 {
     auto mr = new MaterialRes;
     mr->shaders = shader_resource;
@@ -65,7 +65,7 @@ Resources::ResourceID Renderer::createMaterialResource(Resources::ResourceID sha
     return Resources::createResource(mr);
 }
 
-void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID mesh, Resources::ResourceID mat)
+void Flux::Renderer::addMesh(EntityRef entity, Resources::ResourceRef<MeshRes> mesh, Resources::ResourceRef<MaterialRes> mat)
 {
     auto mc = new MeshCom;
     mc->mesh_resource = mesh;
@@ -83,13 +83,15 @@ void Flux::Renderer::addMesh(ECSCtx *ctx, EntityID entity, Resources::ResourceID
     tc->transformation = glm::mat4();
     tc->has_parent = false;
 
-    Flux::addComponent(ctx, entity, MeshComponentID, mc);
-    Flux::addComponent(ctx, entity, TransformComponentID, tc);
+    // Flux::addComponent(ctx, entity, MeshComponentID, mc);
+    // Flux::addComponent(ctx, entity, TransformComponentID, tc);
+    entity.addComponent(mc);
+    entity.addComponent(tc);
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec2& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec2& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -101,13 +103,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec3& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec3& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -119,13 +121,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::vec4& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec4& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -137,13 +139,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const float& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const float& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -155,13 +157,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const int& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const int& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -173,13 +175,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const bool& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const bool& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -191,13 +193,13 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }
 
-void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& name, const glm::mat4& v)
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::mat4& v)
 {
-    auto mr = (MaterialRes*)Resources::getResource(res);
+    // auto mr = (MaterialRes*)Resources::getResource(res);
 
     Uniform us;
     us.location = -1;
@@ -209,6 +211,6 @@ void Flux::Renderer::setUniform(Resources::ResourceID res, const std::string& na
 
     us.value = value;
 
-    mr->uniforms[name] = us;
-    mr->changed = true;
+    res->uniforms[name] = us;
+    res->changed = true;
 }

@@ -13,57 +13,49 @@
 
 using namespace Flux;
 
-ECSCtx* Flux::createContext()
+Flux::ECSCtx::ECSCtx()
 {
-    ECSCtx* ctx = new ECSCtx;
 
     // Clean out entities
     for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
     {
-        ctx->entities[i] = nullptr;
+        entities[i] = nullptr;
     }
 
     // Initialise systems
-    ctx->system_order = std::vector<SystemID>();
-    ctx->system_count = 0;
+    system_order = std::vector<SystemID>();
+    system_count = 0;
 
     // We don't need to clean out systems
 
     // Initialize reuse queue
-    ctx->reuse = std::queue<int>();
-    ctx->system_reuse = std::queue<SystemID>();
+    reuse = std::queue<int>();
+    system_reuse = std::queue<SystemID>();
 
     // Start ID count
-    ctx->current_id = 0;
-    ctx->id_count = 0;
+    current_id = 0;
+    id_count = 0;
 
     // Make sure queues don't segfault
-    ctx->destruction_count = 0;
-    ctx->system_queue_count = 0;
-
-    return ctx;
+    destruction_count = 0;
+    system_queue_count = 0;
 }
 
-bool Flux::destroyContext(ECSCtx* ctx)
+void Flux::ECSCtx::destroyAllEntities()
 {
     // Free everything
     
     // Free all Entities
     for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
     {
-        if (ctx->entities[i] != nullptr)
+        if (entities[i] != nullptr)
         {
-            destroyEntity(ctx, i);
+            destroyEntity(EntityRef(this, i));
         }
     }
-
-    // Free ctx
-    delete ctx;
-
-    return true;
 }
 
-EntityID Flux::createEntity(ECSCtx* ctx)
+EntityRef Flux::ECSCtx::createEntity()
 {
     // Allocate
     Entity* entity = new Entity;
@@ -76,50 +68,50 @@ EntityID Flux::createEntity(ECSCtx* ctx)
 
     // Add to ctx
     // Check ID queue
-    EntityID entity_id;
+    int entity_id;
 
-    if (ctx->reuse.size() > 0)
+    if (reuse.size() > 0)
     {
         // Take first used id
-        entity_id = ctx->reuse.front();
-        ctx->reuse.pop();
+        entity_id = reuse.front();
+        reuse.pop();
     }
     else
     {
-        if (ctx->current_id < FLUX_MAX_ENTITIES)
+        if (current_id < FLUX_MAX_ENTITIES)
         {
-            entity_id = ctx->current_id;
-            ctx->current_id ++;
+            entity_id = current_id;
+            current_id ++;
         }
         else
         {
             // Out of IDs
             LOG_ERROR("Out of Entity IDs. Returning -1. If you require more entities, increase FLUX_MAX_ENTITIES");
-            return -1;
+            return EntityRef(this, -1);
         }
     }
 
     // Now add reference to ctx
-    ctx->entities[entity_id] = entity;
+    entities[entity_id] = entity;
 
-    return entity_id;
+    return EntityRef(this, entity_id);
 }
 
-Entity* Flux::getEntity(ECSCtx* ctx, EntityID entity)
+Entity* Flux::ECSCtx::getEntity(EntityRef entity)
 {
-    return ctx->entities[entity];
+    return entities[entity.getEntityID()];
 }
 
-bool Flux::destroyEntity(ECSCtx* ctx, EntityID entity)
+bool Flux::ECSCtx::destroyEntity(EntityRef entity)
 {
-    auto en = getEntity(ctx, entity);
+    auto en = getEntity(entity);
 
     // Remove components
     for (int i = 0; i < FLUX_MAX_COMPONENTS; i++)
     {
-        if (hasComponent(ctx, entity, i))
+        if (_hasComponent(entity.getEntityID(), i))
         {
-            removeComponent(ctx, entity, i);
+            _removeComponent(entity.getEntityID(), i);
         }
     }
 
@@ -127,34 +119,34 @@ bool Flux::destroyEntity(ECSCtx* ctx, EntityID entity)
     delete en;
 
     // Remove from ctx
-    ctx->entities[entity] = nullptr;
+    entities[entity.getEntityID()] = nullptr;
 
     // Add to reuse pile
-    ctx->reuse.push(entity);
+    reuse.push(entity.getEntityID());
 
     return true;
 }
 
-bool Flux::queueDestroyEntity(ECSCtx *ctx, EntityID entity)
+bool Flux::ECSCtx::queueDestroyEntity(EntityRef entity)
 {
-    if (ctx->destruction_count+1 > FLUX_MAX_SYSTEM_QUEUE)
+    if (destruction_count+1 > FLUX_MAX_SYSTEM_QUEUE)
     {
         LOG_ERROR("System Queue overloaded. Increase FLUX_MAX_SYSTEM_QUEUE to remove this error");
         return false;
     }
 
-    ctx->destruction_count++;
-    ctx->destruction_queue[ctx->destruction_count-1] = entity;
+    destruction_count++;
+    destruction_queue[destruction_count-1] = entity.getEntityID();
 
     return true;
 }
 
-bool Flux::destroyQueuedEntities(ECSCtx *ctx)
+bool Flux::ECSCtx::destroyQueuedEntities()
 {
-    for (int i = ctx->destruction_count-1; i >= 0; i--)
+    for (int i = destruction_count-1; i >= 0; i--)
     {
-        destroyEntity(ctx, ctx->destruction_queue[i]);
-        ctx->destruction_count -= 1;
+        destroyEntity(EntityRef(this, destruction_queue[i]));
+        destruction_count -= 1;
     }
 
     return true;
@@ -165,7 +157,7 @@ static std::map<std::string, ComponentTypeID> component_types;
 static ComponentTypeID on = 0;
 
 // Component destructor array
-void (*component_destructors[FLUX_MAX_COMPONENTS])(ECSCtx* ctx, EntityID entity);
+void (*component_destructors[FLUX_MAX_COMPONENTS])(EntityRef entity);
 
 ComponentTypeID Flux::getComponentType(const std::string& name)
 {
@@ -190,17 +182,19 @@ ComponentTypeID Flux::getComponentType(const std::string& name)
     // Zero the destructor
     component_destructors[next] = nullptr;
 
+    // LOG_INFO("Got component type for component " + name);
+
     return next;
 }
 
-void Flux::setComponentDestructor(ComponentTypeID component, void (*function)(ECSCtx* ctx, EntityID entity))
+void Flux::_setComponentDestructor(ComponentTypeID component, void (*function)(EntityRef))
 {
     component_destructors[component] = function;
 }
 
-void Flux::addComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type, Component* component)
+void Flux::ECSCtx::_addComponent(int entity, ComponentTypeID component_type, Component* component)
 {
-    auto en = getEntity(ctx, entity);
+    auto en = getEntity(EntityRef(this, entity));
     
     // Check for existing component
     if (en->components[component_type] != nullptr)
@@ -209,44 +203,45 @@ void Flux::addComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_
         LOG_WARN("Component already exists - overwriting (disable this warning by defining FLUX_NO_WARN_OVERRIDE_COMPONENT)");
         #endif
 
-        removeComponent(ctx, entity, component_type);
+        _removeComponent(entity, component_type);
     }
 
     en->components[component_type] = component;
 }
 
-bool Flux::hasComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type)
+bool Flux::ECSCtx::_hasComponent(int entity, ComponentTypeID component_type)
 {
-    return getEntity(ctx, entity)->components[component_type] != nullptr;
+    return getEntity(EntityRef(this, entity))->components[component_type] != nullptr;
 }
 
-Component* Flux::getComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type)
+Component* Flux::ECSCtx::_getComponent(int entity, ComponentTypeID component_type)
 {
-    return getEntity(ctx, entity)->components[component_type];
+    return getEntity(EntityRef(this, entity))->components[component_type];
 }
 
-bool Flux::removeComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type)
+bool Flux::ECSCtx::_removeComponent(int entity, ComponentTypeID component_type)
 {
     // Run destructor
+    auto er = EntityRef(this, entity);
     if (component_destructors[component_type] != nullptr)
     {
-        component_destructors[component_type](ctx, entity);
+        component_destructors[component_type](er);
     }
 
     // Remove it
-    auto comp = getEntity(ctx, entity)->components[component_type];
+    auto comp = getEntity(er)->components[component_type];
     delete comp;
-    getEntity(ctx, entity)->components[component_type] = nullptr;
+    getEntity(er)->components[component_type] = nullptr;
 
     return true;
 }
 
-int Flux::addSystem(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded)
+int Flux::ECSCtx::addSystem(System* sys, bool threaded)
 {
     // Create System
-    System s;
-    s.function = function;
-    // s.id = ctx->id_count;
+    SystemContainer s;
+    s.sys = sys;
+    // s.id = id_count;
     #ifndef FLUX_NO_THREADING
     s.threaded = threaded;
     #else
@@ -255,60 +250,60 @@ int Flux::addSystem(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), boo
 
     // LOG_INFO("Created system");
 
-    // ctx->id_count ++;
+    // id_count ++;
 
-    if (!ctx->system_reuse.empty())
+    if (!system_reuse.empty())
     {
         // Use recycled ID
-        int id = ctx->system_reuse.front();
-        ctx->system_reuse.pop();
+        int id = system_reuse.front();
+        system_reuse.pop();
 
-        ctx->systems[id] = s;
+        systems[id] = s;
         return id;
     }
     else
     {
         // Use new ID
-        int id = ctx->id_count;
+        int id = id_count;
         // std::cout << id << std::endl;
         // LOG_INFO("About to add...");
-        ctx->systems[id] = s;
+        systems[id] = s;
         // LOG_INFO("Adding id...");
-        ctx->id_count++;
+        id_count++;
         // LOG_INFO("Added to systems");
         return id;
     }
 }
 
-int Flux::addSystemFront(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded)
+int Flux::ECSCtx::addSystemFront(System* sys, bool threaded)
 {
-    SystemID s = addSystem(ctx, function, threaded);
+    SystemID s = addSystem(sys, threaded);
     // Add to ctx
-    ctx->system_order.insert(ctx->system_order.begin(), s);
-    ctx->system_count++;
+    system_order.insert(system_order.begin(), s);
+    system_count++;
 
     return s;
 }
 
-int Flux::addSystemBack(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded)
+int Flux::ECSCtx::addSystemBack(System* sys, bool threaded)
 {
-    SystemID s = addSystem(ctx, function, threaded);
+    SystemID s = addSystem(sys, threaded);
     // LOG_INFO("Added system");
 
     // Add to ctx
-    ctx->system_order.push_back(s);
-    ctx->system_count++;
+    system_order.push_back(s);
+    system_count++;
     // LOG_INFO("Added to ctx");
 
     return s;
 }
 
-bool Flux::removeSystem(ECSCtx* ctx, int system_id)
+bool Flux::ECSCtx::removeSystem(int system_id)
 {
     int idx = -1;
-    for (int s = 0; s < ctx->system_count; s++)
+    for (int s = 0; s < system_count; s++)
     {
-        if (ctx->system_order[s] == system_id)
+        if (system_order[s] == system_id)
         {
             idx = s;
             break;
@@ -321,78 +316,83 @@ bool Flux::removeSystem(ECSCtx* ctx, int system_id)
     }
     else
     {
-        ctx->system_order.erase(ctx->system_order.begin() + idx);
+        system_order.erase(system_order.begin() + idx);
 
         // Remove from array
         // We don't _actually_ remove it from the array,
         // But the next system added will overwrite it
-        ctx->system_reuse.push(system_id);
+        system_reuse.push(system_id);
         
-        ctx->system_count--;
+        system_count--;
     }
 
     return true;
 }
 
-void Flux::runSystem(ECSCtx *ctx, SystemID sys, float delta, bool run_queue)
+void Flux::ECSCtx::runSystem(SystemID sys, float delta, bool run_queue)
 {
     // Run system queue
     if (run_queue)
     {
-        runQueuedSystems(ctx, delta);
+        runQueuedSystems(delta);
     }
 
-    if (ctx->systems[sys].threaded)
+    if (systems[sys].threaded)
     {
         #ifndef FLUX_NO_THREADING
         // Do threading stuff
-        Threads::runThreads(Flux::threading_context, ctx, ctx->systems[sys], delta);
-        Threads::waitForThreads(Flux::threading_context);
+        // Threads::runThreads(Flux::threading_context, ctx, systems[sys], delta);
+        // Threads::waitForThreads(Flux::threading_context);
         #endif
     }
     else
     {
+        systems[sys].sys->onSystemStart();
         for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
         {
-            if (ctx->entities[i] != nullptr)
+            if (entities[i] != nullptr)
             {
-                ctx->systems[sys].function(ctx, i, delta);
+                systems[sys].sys->runSystem(EntityRef(this, i), delta);
             }
         }
+        systems[sys].sys->onSystemEnd();
     }
 }
 
-void Flux::runQueuedSystems(ECSCtx *ctx, float delta)
+void Flux::ECSCtx::runQueuedSystems(float delta)
 {
-    for (int i = ctx->system_queue_count-1; i >= 0; i--)
+    for (int i = system_queue_count-1; i >= 0; i--)
     {
-        runSystem(ctx, ctx->system_queue[i], delta, false);
-        ctx->system_queue_count -= 1;
+        runSystem(system_queue[i], delta, false);
+        system_queue_count -= 1;
     }
 }
 
-void Flux::runSystems(ECSCtx* ctx, float delta)
+void Flux::ECSCtx::runSystems(float delta)
 {
-    for (int s = 0; s < ctx->system_count; s++)
+    for (int s = 0; s < system_count; s++)
     {
-        runSystem(ctx, ctx->system_order[s], delta);
+        runSystem(system_order[s], delta);
     }
 
     // Make sure we end with an empty queue
-    runQueuedSystems(ctx, delta);
+    runQueuedSystems(delta);
 
     // And destroy queued entities
-    destroyQueuedEntities(ctx);
+    destroyQueuedEntities();
 }
 
-void Flux::queueRunSystem(ECSCtx *ctx, SystemID system)
+void Flux::ECSCtx::queueRunSystem(SystemID system)
 {
-    if (ctx->system_queue_count+1 > FLUX_MAX_SYSTEM_QUEUE)
+    if (system_queue_count+1 > FLUX_MAX_SYSTEM_QUEUE)
     {
         LOG_ERROR("System Queue overloaded. Increase FLUX_MAX_SYSTEM_QUEUE to remove this error");
         return;
     }
 
-    ctx->system_queue_count++;
-    ctx->system_queue[ctx->system_queue_count-1] = system;
+    system_queue_count++;
+    system_queue[system_queue_count-1] = system;
 }
+
+// Because C++ is stupid
+void Flux::System::runSystem(EntityRef entity, float delta) {}

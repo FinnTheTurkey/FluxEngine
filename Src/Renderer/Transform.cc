@@ -10,13 +10,13 @@
 
 using namespace Flux;
 
-static Flux::EntityID camera;
+static Flux::EntityRef camera;
 
 static Flux::ComponentTypeID MeshComponentID = -1;
 static Flux::ComponentTypeID TransformComponentID = -1;
 static Flux::ComponentTypeID CameraComponentID = -1;
 
-void Flux::Transform::setCamera(ECSCtx *ctx, EntityID entity)
+void Flux::Transform::setCamera(EntityRef entity)
 {
     if (MeshComponentID == -1)
     {
@@ -26,17 +26,17 @@ void Flux::Transform::setCamera(ECSCtx *ctx, EntityID entity)
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Camera must have transform component.");
         return;
     }
 
     auto cc = new CameraCom;
-    Flux::addComponent(ctx, entity, CameraComponentID, cc);
+    entity.addComponent(cc);
 }
 
-void Flux::Transform::rotate(ECSCtx *ctx, EntityID entity, const glm::vec3& axis, const float& angle_rad)
+void Flux::Transform::rotate(EntityRef entity, const glm::vec3& axis, const float& angle_rad)
 {
     if (MeshComponentID == -1)
     {
@@ -46,18 +46,18 @@ void Flux::Transform::rotate(ECSCtx *ctx, EntityID entity, const glm::vec3& axis
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
         return;
     }
 
-    auto tc = (TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<TransformCom>();
     
     tc->transformation = glm::rotate(tc->transformation, angle_rad, axis);
 }
 
-void Flux::Transform::translate(ECSCtx *ctx, EntityID entity, const glm::vec3& offset)
+void Flux::Transform::translate(EntityRef entity, const glm::vec3& offset)
 {
     if (MeshComponentID == -1)
     {
@@ -67,18 +67,18 @@ void Flux::Transform::translate(ECSCtx *ctx, EntityID entity, const glm::vec3& o
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
         return;
     }
 
-    auto tc = (TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<TransformCom>();
     
     tc->transformation = glm::translate(tc->transformation, offset);
 }
 
-void Flux::Transform::scale(ECSCtx* ctx, EntityID entity, const glm::vec3& scalar)
+void Flux::Transform::scale(EntityRef entity, const glm::vec3& scalar)
 {
     if (MeshComponentID == -1)
     {
@@ -88,18 +88,18 @@ void Flux::Transform::scale(ECSCtx* ctx, EntityID entity, const glm::vec3& scala
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
         return;
     }
 
-    auto tc = (TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<TransformCom>();
     
     tc->transformation = glm::scale(tc->transformation, scalar);
 }
 
-void Flux::Transform::setTranslation(ECSCtx* ctx, EntityID entity, const glm::vec3 &translation)
+void Flux::Transform::setTranslation(EntityRef entity, const glm::vec3 &translation)
 {
     if (MeshComponentID == -1)
     {
@@ -109,18 +109,18 @@ void Flux::Transform::setTranslation(ECSCtx* ctx, EntityID entity, const glm::ve
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
         return;
     }
 
-    auto tc = (TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<TransformCom>();
 
     tc->transformation[3] = glm::vec4(translation, 1);
 }
 
-glm::vec3 Flux::Transform::getTranslation(ECSCtx* ctx, EntityID entity)
+glm::vec3 Flux::Transform::getTranslation(EntityRef entity)
 {
     if (MeshComponentID == -1)
     {
@@ -130,26 +130,26 @@ glm::vec3 Flux::Transform::getTranslation(ECSCtx* ctx, EntityID entity)
         CameraComponentID = Flux::getComponentType("camera");
     }
 
-    if (!Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
         return glm::vec3();
     }
 
-    auto tc = (TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<TransformCom>();
 
     return glm::vec3(tc->transformation[3]);
 }
 
-glm::mat4 getParentTransform(ECSCtx* ctx, EntityID entity)
+glm::mat4 getParentTransform(EntityRef entity)
 {
-    if (Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
     {
-        auto tc = (Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+        auto tc = entity.getComponent<Transform::TransformCom>();
         
         if (tc->has_parent)
         {
-            return getParentTransform(ctx, tc->parent) * tc->transformation;
+            return getParentTransform(tc->parent) * tc->transformation;
         }
 
         return tc->transformation;
@@ -160,33 +160,33 @@ glm::mat4 getParentTransform(ECSCtx* ctx, EntityID entity)
     }
 }
 
-void cameraSystem(ECSCtx* ctx, EntityID entity, float delta)
+void Flux::Transform::CameraSystem::runSystem(EntityRef entity, float delta)
 {
-    if (Flux::hasComponent(ctx, entity, CameraComponentID))
+    if (entity.hasComponent<Flux::Transform::CameraCom>())
     {
         // Calculate camera rotations
-        auto tc = (Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
-        auto cc = (Transform::CameraCom*)Flux::getComponent(ctx, entity, CameraComponentID);
+        auto tc = entity.getComponent<Transform::TransformCom>();
+        auto cc = entity.getComponent<Transform::CameraCom>();
 
-        cc->view_matrix = glm::inverse(getParentTransform(ctx, entity));
+        cc->view_matrix = glm::inverse(getParentTransform(entity));
 
         camera = entity;
     }
 }
 
-void transformSystem(ECSCtx* ctx, EntityID entity, float delta)
+void Flux::Transform::TransformationSystem::runSystem(EntityRef entity, float delta)
 {
-    if (Flux::hasComponent(ctx, entity, TransformComponentID))
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
     {
         // Calculate model view matrix
-        auto tc = (Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+        auto tc = entity.getComponent<Transform::TransformCom>();
 
         // Get camera
-        auto cc = (Transform::CameraCom*)Flux::getComponent(ctx, camera, CameraComponentID);
+        auto cc = camera.getComponent<Transform::CameraCom>();
 
         // Recursivly add parent transform, as well
         // TODO: Maybe make this more efficient?
-        auto pt = getParentTransform(ctx, entity);
+        auto pt = getParentTransform(entity);
 
         auto mv = cc->view_matrix * pt;
         tc->model_view = mv;
@@ -196,31 +196,37 @@ void transformSystem(ECSCtx* ctx, EntityID entity, float delta)
 
 void Flux::Transform::addTransformSystems(ECSCtx *ctx)
 {
-    Flux::addSystemFront(ctx, transformSystem, true);
-    Flux::addSystemFront(ctx, cameraSystem, true);
+    ctx->addSystemFront(new TransformationSystem, true);
+    ctx->addSystemFront(new CameraSystem, true);
 }
 
-void Flux::Transform::setParent(ECSCtx *ctx, EntityID entity, EntityID parent)
+void Flux::Transform::setParent(EntityRef entity, EntityRef parent)
 {
-    if (!Flux::hasComponent(ctx, parent, TransformComponentID))
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
     {
         LOG_ERROR("Parent must have transform component");
         return;
     }
 
-    auto tc = (Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    auto tc = entity.getComponent<Transform::TransformCom>();
     if (tc->has_parent)
     {
-        removeParent(ctx, entity);
+        removeParent(entity);
     }
 
     tc->parent = parent;
     tc->has_parent = true;
 }
 
-void Flux::Transform::removeParent(ECSCtx *ctx, EntityID entity)
+void Flux::Transform::removeParent(EntityRef entity)
 {
-    auto tc = (Transform::TransformCom*)Flux::getComponent(ctx, entity, TransformComponentID);
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
+    {
+        LOG_ERROR("Child must have transform component");
+        return;
+    }
+
+    auto tc = entity.getComponent<Transform::TransformCom>();
 
     if (tc->has_parent)
     {

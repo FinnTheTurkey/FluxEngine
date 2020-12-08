@@ -1,6 +1,7 @@
 #ifndef FLUX_ECS_HH
 #define FLUX_ECS_HH
 
+#include "Flux/Log.hh"
 #ifndef FLUX_MAX_ENTITIES
 #define FLUX_MAX_ENTITIES 1024
 #endif
@@ -26,10 +27,22 @@
 #include <string>
 #include <vector>
 
+// Defines
+// Aka dark magic
+
+#define FLUX_DEFINE_COMPONENT(type, nameid) namespace FluxTypes { template <> struct TypeMap< FluxTypes::type_id<type> > {static constexpr const char* name = #nameid;}; }
+
+namespace FluxTypes
+{
+    template <void (*)()> struct TypeMap;
+
+    template<typename T>
+    void type_id(){}
+}
 
 namespace Flux 
 {
-    typedef int EntityID;
+    // typedef int EntityID;
     typedef int ComponentTypeID;
     typedef int SystemID;
 
@@ -51,12 +64,31 @@ namespace Flux
         Component *components[FLUX_MAX_COMPONENTS];
     };
 
+    class EntityRef;
+
+    /**
+    Base class for systems. Has 3 virtual functions that can be overriden
+    */
+    class System
+    {
+    public:
+        /** Called right before this system is run.  */
+        virtual void onSystemStart() {}
+
+        /** Called for every entity in the ECS */
+        virtual void runSystem(EntityRef entity, float delta);
+
+        /** Called after this system is run */
+        virtual void onSystemEnd() {}
+
+    };
+
     /**
      * System struct. This contains infomation on how to run a system
      */
-    struct System
+    struct SystemContainer
     {
-        void (*function)(ECSCtx*, EntityID, float);
+        System* sys;
         int id;
         bool threaded;
     };
@@ -64,8 +96,9 @@ namespace Flux
     /**
     The context for the entire ECS.
     */
-    struct ECSCtx
+    class ECSCtx
     {
+    private:
         /**
         Array of all entities. An EntityID is an index in this array
         */
@@ -75,7 +108,7 @@ namespace Flux
         int current_id;
 
         /** Array where the actual systems are stored */
-        System systems[FLUX_MAX_SYSTEMS];
+        SystemContainer systems[FLUX_MAX_SYSTEMS];
 
         /**
          * Vector of systems. Using a vector so systems can be added at the front and back.
@@ -104,62 +137,135 @@ namespace Flux
         // ===================
 
         /** Queue of IDs waiting to be reused */
-        std::queue<EntityID> reuse;
+        std::queue<int> reuse;
 
         /** System reuse */
         std::queue<SystemID> system_reuse;
+
+    public:
+        // Functions
+        // Entity Section
+        // ===============================================
+
+        // Constructor and destructor
+        ECSCtx();
+        ~ECSCtx() {};
+
+        /** Destroy all the entities */
+        void destroyAllEntities();
+
+        /**
+        Creates an Entity. Returns an identifier which represents the new Entity in the ECS, otherwise known as the EntityID.
+        */
+        EntityRef createEntity();
+
+        /**
+        Removes an Entity from the ECS. Once an Entity is removed, it is gone.
+        Its EntityID will be reused, so be sure to remove all references to it
+        */
+        bool destroyEntity(EntityRef entity);
+
+        /**
+        Queues an Entity for destruction. It will be destroyed at the end of runAllSystems,
+        or if destroyQueuedEntities() is called
+        */
+        bool queueDestroyEntity(EntityRef entity);
+
+        /**
+        Destroyes all the entities in the destruction queue
+        */
+        bool destroyQueuedEntities();
+
+
+        /**
+        Gets the entity from the context, and returns it to you as a pointer
+        There are very few cases where this function should be used, most of the time you should be accessing components using the Entity's id
+        Returns _nullptr_ if it cannot find entity
+        */
+        Entity* getEntity(EntityRef entity);
+
+
+        // Component Section
+        // ===============================================
+
+        /**
+        Adds a component to an Entity. 
+        Since the component could be of any type, the component must be provided.
+        Once a component is added to an Entity, it is managed by the ECS context. It will be freed when it is removed, the entity is destroyed, or the entire ECS is destroyed
+        */
+        void _addComponent(int entity, ComponentTypeID component_type, Component* component);
+
+        /**
+        Returns true if the given entity has a component of the given type
+        */
+        bool _hasComponent(int entity, ComponentTypeID component_type);
+
+        /**
+        Returns the given component on the given entity. Returns nullptr if the component doesn't exist
+        */
+        Component* _getComponent(int entity, ComponentTypeID component_type);
+
+        /**
+        Removes and frees the given component of the given entity
+        Components are unrecoverable, and any pointers to them will become dangling
+        */
+        bool _removeComponent(int entity, ComponentTypeID component_type);
+
+
+        // System Section
+        // ===============================================
+
+        /**
+        Adds a system to the ECS. This system will not be run unless explicitly called.
+        */
+        int addSystem(System* sys, bool threaded=true);
+
+        /**
+        * Adds a system to the system queue.
+        * This system is added to the front, and will be executed first
+        * Returns the system's ID, which can be used to delete it.
+        * Takes a function pointer. When the system is run, that function pointer will be called against every Entity
+        * **WARNING:** This function is quite expensive, and _should never_ be run every frame
+        */
+        int addSystemFront(System* sys, bool threaded = true);
+
+        /**
+        * Adds a system to the system queue.
+        * This system is added to the back, and will be executed last
+        * Returns the system's ID, which can be used to delete it.
+        * Takes a function pointer. When the system is run, that function pointer will be called against every Entity
+        * **WARNING:** This function is quite expensive, and _should never_ be run every frame
+        */
+        int addSystemBack(System* sys, bool threaded = true);
+
+        /**
+        * Removes the given system.
+        * **WARNING:** This function is very expensive
+        */
+        bool removeSystem(int system_id);
+
+        /**
+        * Runs through all the systems on all the Entities
+        */
+        void runSystems(float delta);
+
+        /**
+        Runs a single system.
+        Disable run_queue if you do not want any queued systems to be run before this one
+        */
+        void runSystem(SystemID sys, float delt, bool run_queue = true);
+
+        /**
+        Adds a system to the run queue. It will be run after the current system is done, 
+        or before a new system is run.
+        */
+        void queueRunSystem(SystemID system);
+
+        /**
+        Runs the queued systems. Primarily intended for internal use.
+        */
+        void runQueuedSystems(float delta);
     };
-
-
-    // Context Section
-    // ===============================================
-
-    /** The function that starts everything. It returns an empty Entity Component System */
-    ECSCtx* createContext();
-
-    /**
-    Destroyes ECS and frees memory.
-    Warning: This will deallocate ESSCtx
-    */
-    bool destroyContext(ECSCtx* ctx);
-
-
-    // Entity Section
-    // ===============================================
-
-    /**
-    Creates an Entity. Returns an identifier which represents the new Entity in the ECS, otherwise known as the EntityID.
-    */
-    EntityID createEntity(ECSCtx* ctx);
-
-    /**
-    Removes an Entity from the ECS. Once an Entity is removed, it is gone.
-    Its EntityID will be reused, so be sure to remove all references to it
-    */
-    bool destroyEntity(ECSCtx* ctx, EntityID entity);
-
-    /**
-    Queues an Entity for destruction. It will be destroyed at the end of runAllSystems,
-    or if destroyQueuedEntities() is called
-    */
-    bool queueDestroyEntity(ECSCtx* ctx, EntityID entity);
-
-    /**
-    Destroyes all the entities in the destruction queue
-    */
-    bool destroyQueuedEntities(ECSCtx* ctx);
-
-
-    /**
-    Gets the entity from the context, and returns it to you as a pointer
-    There are very few cases where this function should be used, most of the time you should be accessing components using the Entity's id
-    Returns _nullptr_ if it cannot find entity
-    */
-    Entity* getEntity(ECSCtx* ctx, EntityID entity);
-
-
-    // Component Section
-    // ===============================================
 
     /**
     Returns the ID of the given component type, or creates it if it doesn't exist
@@ -169,87 +275,140 @@ namespace Flux
     ComponentTypeID getComponentType(const std::string& name);
 
     /**
+    Base function for setComponentDestructor
+    */
+    void _setComponentDestructor(ComponentTypeID component, void (*function)(EntityRef));
+
+    /**
     Adds a function that will be called when that type of component is destroyed
     */
-    void setComponentDestructor(ComponentTypeID component, void (*function)(ECSCtx* ctx, EntityID entity));
-
-    /**
-    Adds a component to an Entity. 
-    Since the component could be of any type, the component must be provided.
-    Once a component is added to an Entity, it is managed by the ECS context. It will be freed when it is removed, the entity is destroyed, or the entire ECS is destroyed
-    */
-    void addComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type, Component* component);
-
-    /**
-    Returns true if the given entity has a component of the given type
-    */
-    bool hasComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type);
-
-    /**
-    Returns the given component on the given entity. Returns nullptr if the component doesn't exist
-    */
-    Component* getComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type);
-
-    /**
-    Removes and frees the given component of the given entity
-    Components are unrecoverable, and any pointers to them will become dangling
-    */
-    bool removeComponent(ECSCtx* ctx, EntityID entity, ComponentTypeID component_type);
+    template <typename T>
+    void setComponentDestructor(void (*function)(EntityRef entity))
+    {
+        static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+        _setComponentDestructor(component_id, function);
+    }
 
 
-    // System Section
+    // Context Section
     // ===============================================
 
+    /** The function that starts everything. It returns an empty Entity Component System */
+    // ECSCtx* createContext();
+
     /**
-    Adds a system to the ECS. This system will not be run unless explicitly called.
+    Destroyes ECS and frees memory.
+    Warning: This will deallocate ESSCtx
     */
-    int addSystem(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded=true);
+    // bool destroyContext(ECSCtx* ctx);
 
     /**
-     * Adds a system to the system queue.
-     * This system is added to the front, and will be executed first
-     * Returns the system's ID, which can be used to delete it.
-     * Takes a function pointer. When the system is run, that function pointer will be called against every Entity
-     * **WARNING:** This function is quite expensive, and _should never_ be run every frame
-     */
-    int addSystemFront(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded = true);
-
-    /**
-     * Adds a system to the system queue.
-     * This system is added to the back, and will be executed last
-     * Returns the system's ID, which can be used to delete it.
-     * Takes a function pointer. When the system is run, that function pointer will be called against every Entity
-     * **WARNING:** This function is quite expensive, and _should never_ be run every frame
-     */
-    int addSystemBack(ECSCtx* ctx, void (*function)(ECSCtx*, EntityID, float), bool threaded = true);
-
-    /**
-     * Removes the given system.
-     * **WARNING:** This function is very expensive
-     */
-    bool removeSystem(ECSCtx* ctx, int system_id);
-
-    /**
-     * Runs through all the systems on all the Entities
-     */
-    void runSystems(ECSCtx* ctx, float delta);
-
-    /**
-    Runs a single system.
-    Disable run_queue if you do not want any queued systems to be run before this one
+    A class that points to a specific entity in a specific ECSCtx
     */
-    void runSystem(ECSCtx* ctx, SystemID sys, float delt, bool run_queue = true);
+    class EntityRef
+    {
+    private:
+        int entity_id;
+        ECSCtx* ctx;
 
-    /**
-    Adds a system to the run queue. It will be run after the current system is done, 
-    or before a new system is run.
-    */
-    void queueRunSystem(ECSCtx* ctx, SystemID system);
+        bool checkInvalid()
+        {
+            if (entity_id != -1 && ctx != nullptr)
+            {
+                if (ctx->getEntity(*this) != nullptr)
+                {
+                    return false;
+                }
+            }
 
-    /**
-    Runs the queued systems. Primarily intended for internal use.
-    */
-    void runQueuedSystems(ECSCtx* ctx, float delta);
+            return true;
+        }
+    
+    public:
+        EntityRef()
+        {
+            // For before it is filled up
+            entity_id = -1;
+            ctx = nullptr;
+        }
+
+        EntityRef(ECSCtx* ctx_a, int entity_id_a):
+        entity_id(entity_id_a),
+        ctx(ctx_a)
+        {
+        }
+
+        EntityRef(const EntityRef& ref)
+        {
+            entity_id = ref.entity_id;
+            ctx = ref.ctx;
+        }
+        ~EntityRef() {};
+
+        // Getters
+
+        int getEntityID() const
+        {
+            return entity_id;
+        }
+
+        ECSCtx* getCtx() const
+        {
+            return ctx;
+        }
+
+        // Utility functions
+
+        /**
+        Get a component in this entity.
+        Components are identified by their type, so put the type of the component you wish
+        into the template to retreive it.
+        */
+        template<typename T>
+        T* getComponent()
+        {
+            LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
+            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+
+            return (T*)ctx->_getComponent(entity_id, component_id);
+        }
+
+        /**
+        Add a component to the Entity by type
+        */
+        template<typename T>
+        void addComponent(T* comp)
+        {
+            LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
+            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+
+            ctx->_addComponent(entity_id, component_id, (Component*)comp);
+        }
+
+        /**
+        Check if a component of the given type exists
+        */
+        template<typename T>
+        bool hasComponent()
+        {
+            LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
+            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+
+            return ctx->_hasComponent(entity_id, component_id);
+        }
+
+        /**
+        Remove a component of the given type
+        */
+        template<typename T>
+        void removeComponent()
+        {
+            LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
+            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+
+            ctx->_removeComponent(entity_id, component_id);
+        }
+    };
 
 };
 
