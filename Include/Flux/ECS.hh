@@ -2,6 +2,7 @@
 #define FLUX_ECS_HH
 
 #include "Flux/Log.hh"
+#include "FluxArc/FluxArc.hh"
 #ifndef FLUX_MAX_ENTITIES
 #define FLUX_MAX_ENTITIES 1024
 #endif
@@ -30,7 +31,17 @@
 // Defines
 // Aka dark magic
 
-#define FLUX_DEFINE_COMPONENT(type, nameid) namespace FluxTypes { template <> struct TypeMap< FluxTypes::type_id<type> > {static constexpr const char* name = #nameid;}; }
+// #define FLUX_DEFINE_COMPONENT(type, nameid) namespace FluxTypes { template <> struct TypeMap< FluxTypes::type_id<type> > {static constexpr const char* name = #nameid;}; }
+
+#define FLUX_COMPONENT(type, name) static type* _flux_create()\
+{\
+    return new type;\
+}\
+\
+static std::string _flux_get_name() { return #name;}\
+static inline bool _flux_registered = \
+Flux::registerComponent(#name, (Flux::Component*(*)())&type::_flux_create);
+
 
 namespace FluxTypes
 {
@@ -40,18 +51,36 @@ namespace FluxTypes
     void type_id(){}
 }
 
-namespace Flux 
+namespace Flux
 {
     // typedef int EntityID;
     typedef int ComponentTypeID;
     typedef int SystemID;
 
+    
+    // Pre-definitions
     struct ECSCtx;
+    namespace Resources
+    {
+        class Serializer;
+        class Deserializer;
+    }
 
-    /** Empty struct. All components should inherit from this */
+    /** 
+    All components should inherit from this. 
+    */
     struct Component
     {
+        /**
+        Function to override for serialization.
+        Takes in a Serializer, which can be used to add any needed Resources
+        Put serialized data in the given BinaryFile.
 
+        If you do not wish this component to be serialized, return false.
+        Otherwise, return true
+        */
+        virtual bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) { return false; };
+        virtual void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) {};
     };
 
     /**
@@ -267,12 +296,66 @@ namespace Flux
         void runQueuedSystems(float delta);
     };
 
+    inline std::map<std::string, ComponentTypeID> component_types;
+    inline std::map<std::string, Component*(*)()> component_factory;
+    inline ComponentTypeID on = 0;
+    inline void (*component_destructors[FLUX_MAX_COMPONENTS])(EntityRef entity);
+
     /**
     Returns the ID of the given component type, or creates it if it doesn't exist
     Component types are the same across all ECS contexts
     **WARNING:** This function should **never** be run every frame due to it's use of a map
     */
-    ComponentTypeID getComponentType(const std::string& name);
+    inline ComponentTypeID getComponentType(const std::string& name)
+    {
+        if (component_types.find(name) != component_types.end())
+        {
+            // It's in the map
+            return component_types[name];
+        }
+
+        if (on >= FLUX_MAX_COMPONENTS)
+        {
+            // We're out of component ids
+            LOG_ERROR("Out of ComponentTypeIDs. Returning -1. Increase FLUX_MAX_COMPONENTS if more component IDs are required");
+            return -1;
+        }
+
+        // Create new id
+        ComponentTypeID next = on;
+        on++;
+        component_types[name] = next;
+
+        // Zero the destructor
+        component_destructors[next] = nullptr;
+
+        // LOG_INFO("Got component type for component " + name);
+
+        return next;
+    }
+    
+    inline std::string getComponentType(ComponentTypeID input)
+    {
+        for (auto c : component_types)
+        {
+            if (c.second == input)
+            {
+                return c.first;
+            }
+        }
+
+        return "how did this happen";
+    }
+
+    /**
+    Register's a component's existance
+    */
+    inline bool registerComponent(std::string name, Component*(*function)())
+    {
+        component_factory[name] = function;
+        getComponentType(name);
+        return true;
+    }
 
     /**
     Base function for setComponentDestructor
@@ -285,7 +368,8 @@ namespace Flux
     template <typename T>
     void setComponentDestructor(void (*function)(EntityRef entity))
     {
-        static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+        // static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+        static int component_id = getComponentType(T::_flux_get_name());
         _setComponentDestructor(component_id, function);
     }
 
@@ -308,8 +392,8 @@ namespace Flux
     class EntityRef
     {
     private:
-        int entity_id;
         ECSCtx* ctx;
+        int entity_id;
 
         bool checkInvalid()
         {
@@ -368,7 +452,7 @@ namespace Flux
         T* getComponent()
         {
             LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
-            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+            static int component_id = getComponentType(T::_flux_get_name());
 
             return (T*)ctx->_getComponent(entity_id, component_id);
         }
@@ -380,7 +464,7 @@ namespace Flux
         void addComponent(T* comp)
         {
             LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
-            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+            static int component_id = getComponentType(T::_flux_get_name());
 
             ctx->_addComponent(entity_id, component_id, (Component*)comp);
         }
@@ -392,7 +476,7 @@ namespace Flux
         bool hasComponent()
         {
             LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
-            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+            static int component_id = getComponentType(T::_flux_get_name());
 
             return ctx->_hasComponent(entity_id, component_id);
         }
@@ -404,9 +488,14 @@ namespace Flux
         void removeComponent()
         {
             LOG_ASSERT_MESSAGE_FATAL(checkInvalid(), "This is not a valid entity: Make sure it has been initialized, and has not be deleted");
-            static int component_id = getComponentType(std::string(FluxTypes::TypeMap<FluxTypes::type_id<T>>().name));
+            static int component_id = getComponentType(T::_flux_get_name());
 
             ctx->_removeComponent(entity_id, component_id);
+        }
+
+        friend bool operator== (const EntityRef& a, const EntityRef& b)
+        {
+            return a.getEntityID() == b.getEntityID();
         }
     };
 

@@ -9,9 +9,22 @@
 
 // Flux includes
 #include "Flux/ECS.hh"
+#include "FluxArc/FluxArc.hh"
 
 // STL includes
 #include <queue>
+#include <typeinfo>
+#include <utility>
+#include <typeindex>
+
+#define FLUX_RESOURCE(type, name) static type* _flux_res_create()\
+{\
+    return new type;\
+}\
+\
+std::string _flux_res_get_name() override { return #name;}\
+static inline bool _flux_res_registered = \
+Flux::Resources::registerResource(#name, (Flux::Resources::Resource*(*)())&type::_flux_res_create);
 
 namespace Flux { namespace Resources {
 
@@ -24,6 +37,8 @@ namespace Flux { namespace Resources {
     */
     struct Resource: Component
     {
+        FLUX_COMPONENT(Resource, resource);
+        virtual std::string _flux_res_get_name() {return "resource";}
 
     };
 
@@ -57,6 +72,11 @@ namespace Flux { namespace Resources {
             T* operator -> ()
             {
                 return (T*)entity.getComponent<Resource>();
+            }
+
+            friend bool operator == (const ResourceRef<T>& a, const ResourceRef<T>& b)
+            {
+                return a.entity == b.entity;
             }
 
             EntityRef getBaseEntity() const
@@ -122,11 +142,26 @@ namespace Flux { namespace Resources {
     */
     void addFileLoader(const std::string& ext, Flux::Resources::Resource*(*function)(std::ifstream*));
 
+    // inline std::map<std::string, std::type_index > resource_types_map;
+    inline std::map<std::string, Resource*(*)() > resource_factory_map;
+
+    /**
+    Registers a resource's existance
+    */
+    inline bool registerResource(const std::string& name, Resource*(*function)())
+    {
+        // resource_types_map[name] = type_info;
+        resource_factory_map[name] = function;
+
+        return true;
+    }
+
     // ==================================
     // Text resource
     // ==================================
-    struct TextResource: Resource
+    struct TextResource: public Resource
     {
+        FLUX_RESOURCE(TextResource, text-resource);
         std::string content;
     };
 
@@ -140,9 +175,72 @@ namespace Flux { namespace Resources {
     */
     Resource* ext_createTextResource(std::ifstream* file);
 
+    // ===================================
+    // Serialization and deserialization
+    // ===================================
+    
+    /** Class to aid serialization. You put in Entities, it puts them into a file */
+    class Serializer
+    {
+    public:
+        Serializer();
+
+        /**
+        Add an Entity to the file
+        Returns an int that can be put in a BinaryFile to get that Resource
+        */
+        uint32_t addEntity(EntityRef entity);
+
+        /**
+        Adds a resource to the file as a dependency.
+        Returns an int that can be put in a BinaryFile to get that Resource
+        */
+        uint32_t addResource(ResourceRef<Resource> res);
+
+        /** Saves the Entities and Resources to a file */
+        void save(FluxArc::Archive& arc, bool release);
+
+    private:
+        std::vector<EntityRef> entities;
+        std::vector<ResourceRef<Resource>> resources;
+    };
+
+    struct EntityData
+    {
+        int id;
+        std::map<std::string, FluxArc::BinaryFile*> component_data;
+    };
+
+    /** Loads a saved scene into memory.  */
+    class Deserializer
+    {
+    public:
+        Deserializer(std::string filename);
+        ~Deserializer();
+
+        /** Add all of the Entities from the file to an ECSCtx. Returns a vector if EntityRefs */
+        std::vector<EntityRef> addToECS(ECSCtx* ctx);
+
+        /** Get a resource from the deserializer */
+        ResourceRef<Resource> getResource(uint32_t id);
+
+        /** Gets a singular entity from the Deserializer. Warning: This should only be called from the "deserialize" function */
+        EntityRef getEntity(int id);
+    
+    private:
+        FluxArc::Archive arc;
+        std::vector<EntityData> entities;
+        std::vector<bool> resource_done;
+        std::vector<ResourceRef<Resource>> resources;
+
+        std::vector<bool> entity_done;
+        std::vector<EntityRef> entitys;
+        ECSCtx* current_ctx;
+    };
+
 }}
 
 // Components
-FLUX_DEFINE_COMPONENT(Flux::Resources::Resource, resource);
+// FLUX_DEFINE_COMPONENT(Flux::Resources::Resource, resource);
 
 #endif

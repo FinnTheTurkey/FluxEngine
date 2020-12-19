@@ -39,6 +39,7 @@ namespace Flux { namespace GLRenderer {
     */
     struct GLMeshCom: Component
     {
+        FLUX_COMPONENT(GLMeshCom, glmesh);
         uint32_t VBO;
         uint32_t IBO;
         uint32_t VAO;
@@ -52,6 +53,7 @@ namespace Flux { namespace GLRenderer {
     */
     struct GLShaderCom: Component
     {
+        FLUX_COMPONENT(GLShaderCom, glshader);
         // Shader stuff
         uint32_t shader_program;
 
@@ -65,6 +67,7 @@ namespace Flux { namespace GLRenderer {
     struct GLUniformCom: Component
     {
         // More info: Open GL 4 Shading Language Cookbook, page 57
+        FLUX_COMPONENT(GLUniformCom, gluniform);
 
         int block_size;
 
@@ -82,7 +85,7 @@ namespace Flux { namespace GLRenderer {
     */
     struct GLEntityCom: Component
     {
-
+        FLUX_COMPONENT(GLEntityCom, glentity);
     };
 
     /**
@@ -148,9 +151,9 @@ namespace Flux { namespace GLRenderer {
 
 }}
 
-FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLMeshCom, gl_mesh);
-FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLShaderCom, gl_shader);
-FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLUniformCom, gl_uniform);
-FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLEntityCom, gl_entity);
+// FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLMeshCom, gl_mesh);
+// FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLShaderCom, gl_shader);
+// FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLUniformCom, gl_uniform);
+// FLUX_DEFINE_COMPONENT(Flux::GLRenderer::GLEntityCom, gl_entity);
 
 #endif

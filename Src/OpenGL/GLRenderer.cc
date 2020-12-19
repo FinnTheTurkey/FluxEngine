@@ -362,8 +362,16 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * mesh_res->indices_length, mesh_res->indices, GL_STATIC_DRAW);
 
             // Tell OpenGL what our data means
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void*)0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)0);
             glEnableVertexAttribArray(0);
+
+            // Normal
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)(sizeof(float) * 3));
+            glEnableVertexAttribArray(1);
+
+            // Texture
+            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)(sizeof(float) * 6));
+            glEnableVertexAttribArray(2);
 
             mesh_com->num_vertices = mesh_res->vertices_length;
             mesh_com->num_indices = mesh_res->indices_length;

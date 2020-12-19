@@ -152,41 +152,6 @@ bool Flux::ECSCtx::destroyQueuedEntities()
     return true;
 }
 
-// Component type map
-static std::map<std::string, ComponentTypeID> component_types;
-static ComponentTypeID on = 0;
-
-// Component destructor array
-void (*component_destructors[FLUX_MAX_COMPONENTS])(EntityRef entity);
-
-ComponentTypeID Flux::getComponentType(const std::string& name)
-{
-    if (component_types.find(name) != component_types.end())
-    {
-        // It's in the map
-        return component_types[name];
-    }
-
-    if (on >= FLUX_MAX_COMPONENTS)
-    {
-        // We're out of component ids
-        LOG_ERROR("Out of ComponentTypeIDs. Returning -1. Increase FLUX_MAX_COMPONENTS if more component IDs are required");
-        return -1;
-    }
-
-    // Create new id
-    ComponentTypeID next = on;
-    on++;
-    component_types[name] = next;
-
-    // Zero the destructor
-    component_destructors[next] = nullptr;
-
-    // LOG_INFO("Got component type for component " + name);
-
-    return next;
-}
-
 void Flux::_setComponentDestructor(ComponentTypeID component, void (*function)(EntityRef))
 {
     component_destructors[component] = function;
