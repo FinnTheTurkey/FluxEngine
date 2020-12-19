@@ -10,3 +10,6 @@
 [submodule "ThirdParty/lz4"]
 	path = ThirdParty/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "FluxTools/FluxArc"]
+	path = FluxTools/FluxArc
+	url = https://github.com/FinnTheTurkey/FluxArc.git
