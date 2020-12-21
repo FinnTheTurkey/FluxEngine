@@ -59,11 +59,21 @@ void __logFileLines(const std::string& prefix, const std::string& text, const ch
 
 void __logAssert(bool condition, bool crash, const std::string& message, const char* file, int line);
 
+#ifndef FLUX_NO_ASSERT
 #define LOG_ASSERT_MESSAGE(cond, txt) __logAssert(cond, false, txt, __FILE__, __LINE__)
 #define LOG_ASSERT(cond) __logAssert(cond, false, "Value != true", __FILE__, __LINE__)
 
 #define LOG_ASSERT_MESSAGE_FATAL(cond, txt) __logAssert(cond, true, txt, __FILE__, __LINE__)
 #define LOG_ASSERT_FATAL(cond) __logAssert(cond, true, "Value != true", __FILE__, __LINE__)
+
+#else
+#define LOG_ASSERT_MESSAGE(cond, txt)
+#define LOG_ASSERT(cond, txt)
+
+#define LOG_ASSERT_MESSAGE_FATAL(cond, txt)
+#define LOG_ASSERT_FATAL(cond, txt)
+
+#endif
 
 
 #endif

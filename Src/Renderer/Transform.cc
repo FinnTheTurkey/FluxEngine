@@ -202,7 +202,7 @@ void Flux::Transform::addTransformSystems(ECSCtx *ctx)
 
 void Flux::Transform::setParent(EntityRef entity, EntityRef parent)
 {
-    if (entity.hasComponent<Flux::Transform::TransformCom>())
+    if (!entity.hasComponent<Flux::Transform::TransformCom>())
     {
         LOG_ERROR("Parent must have transform component");
         return;
@@ -220,7 +220,7 @@ void Flux::Transform::setParent(EntityRef entity, EntityRef parent)
 
 void Flux::Transform::removeParent(EntityRef entity)
 {
-    if (entity.hasComponent<Flux::Transform::TransformCom>())
+    if (!entity.hasComponent<Flux::Transform::TransformCom>())
     {
         LOG_ERROR("Child must have transform component");
         return;

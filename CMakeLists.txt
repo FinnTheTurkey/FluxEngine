@@ -14,6 +14,11 @@ if (FLUX_GCC_PROFILE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
 endif()
 
+if (CMAKE_BUILD_TYPE MATCHES "Release")
+    # Remove assers for release builds
+    add_compile_definitions(FLUX_NO_ASSERT)
+endif()
+
 add_compile_definitions(FLUX_NO_THREADING)
 
 # Make sure GLM always creates matricies with values that actually work

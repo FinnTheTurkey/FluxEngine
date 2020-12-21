@@ -59,9 +59,18 @@ namespace Flux { namespace Renderer {
         uint32_t* indices;
 
         // Functions
+        ~MeshRes()
+        {
+            delete[] vertices;
+            delete[] indices;
+        }
+
         bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
         {
             output->set(vertices_length);
+
+            // Resize the binary file to limit copies
+            output->allocate(sizeof(float) * 8 * vertices_length);
             for (int i = 0; i < vertices_length; i++)
             {
                 output->set(vertices[i].x);
@@ -77,6 +86,7 @@ namespace Flux { namespace Renderer {
             }
 
             output->set(indices_length);
+            output->allocate(sizeof(uint32_t) * indices_length);
             for (int i = 0; i < indices_length; i++)
             {
                 output->set(indices[i]);
