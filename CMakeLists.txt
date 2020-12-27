@@ -17,6 +17,12 @@ endif()
 if (CMAKE_BUILD_TYPE MATCHES "Release")
     # Remove assers for release builds
     add_compile_definitions(FLUX_NO_ASSERT)
+
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # Enable fast math
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ffast-math")
+    endif()
 endif()
 
 add_compile_definitions(FLUX_NO_THREADING)

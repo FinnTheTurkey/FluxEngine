@@ -58,6 +58,7 @@ void Flux::GLRenderer::_startGL()
 
     // Create viewport
     glViewport(0, 0, current_window->width, current_window->height);
+    glEnable(GL_DEPTH_TEST);
 
     // Load IDs for components
     // MeshComponentID = Flux::getComponentType("mesh");
@@ -120,19 +121,27 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
 
             // Request block size from opengl
             uint32_t block_index = glGetUniformBlockIndex(shader_res->shader_program, "Material");
-            // LOG_ASSERT_MESSAGE(block_index == GL_INVALID_OPERATION, "OpenGL Error: Invalid Operation: Could not find shader program");
+            LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "OpenGL Error: Invalid Operation: Could not find shader program");
+            LOG_ASSERT_MESSAGE(block_index == GL_INVALID_INDEX, "OpenGL Error: Invalid Index: Could not find uniform block");
             glGetActiveUniformBlockiv(shader_res->shader_program, block_index, GL_UNIFORM_BLOCK_DATA_SIZE, &uni->block_size);
             LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "OpenGL Error: GL_INVALID_VALUE: Could not find uniform block; make sure your shader has a uniform called Material");
 
             // Request indices from OpenGL
             uni->indices.resize(count);
             glGetUniformIndices(shader_res->shader_program, count, &names[0], &uni->indices[0]);
-            LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "OpenGL Error: GL_INVALID_VALUE: Could not find uniform block; make sure your shader has a uniform called Material");
+            LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "OpenGL Error: GL_INVALID_OPERATION: Shader program is not valid. This is most likely an engine problem");
 
             // Request offset from OpenGL
             // TODO: Use this function to get list of types for error checking
             uni->offset.resize(count);
             glGetActiveUniformsiv(shader_res->shader_program, count, &uni->indices[0], GL_UNIFORM_OFFSET, &uni->offset[0]);
+
+            // TODO: The above function always seems to generate a GL_INVALID_VALUE
+            // I have no clue why
+            // But everything still works
+            // I'm sure this will come back to bite me later
+            
+            // LOG_INFO(std::to_string(glGetError() == GL_INVALID_VALUE));
 
             // Flux::addComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID, uni);
             mesh->mat_resource.getBaseEntity().addComponent(uni);
@@ -207,6 +216,13 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, uni->handle);
 
         delete block_buffer;
+
+        mat_res->changed = false;
+    }
+    else
+    {
+        // Hasn't changed, but we still have to bind it
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, mesh->mat_resource.getBaseEntity().getComponent<GLUniformCom>()->handle);
     }
 
 }
@@ -295,7 +311,8 @@ void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
 
     // Custom Uniforms
     // This creates a Uniform Buffer if one doesn't already exist
-    if (!mesh->mat_resource.getBaseEntity().hasComponent<GLShaderCom>())
+    // Don't know if we need this if statement
+    if (!mat_res.getBaseEntity().hasComponent<GLUniformCom>())
     {
         // Make shaders active
         GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
@@ -307,19 +324,20 @@ void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
 
 void GLRendererSystem::onSystemStart()
 {
+    // TODO: Customisable FOV
     projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
 }
 
 void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 {
     // TODO: change (once systems are redone)
-    if (entity.getEntityID() == 0)
-    {
-        // First entity
-        // Calcualte projection matrix
-        // TODO: Customisable field of view
-        projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
-    }
+    // if (entity.getEntityID() == 0)
+    // {
+    //     // First entity
+    //     // Calcualte projection matrix
+    //     // TODO: Customisable field of view
+    //     projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
+    // }
 
     if (!entity.hasComponent<Flux::Renderer::MeshCom>())
     {
@@ -336,7 +354,6 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
         // Make sure they don't already exist
         if (!mesh->mesh_resource.getBaseEntity().hasComponent<GLMeshCom>())
         {
-            
             // Get the resource
             auto mesh_res = mesh->mesh_resource;
 

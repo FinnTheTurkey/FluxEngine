@@ -136,6 +136,14 @@ namespace Flux { namespace Renderer {
         void* value;
     };
 
+    struct ShaderRes;
+
+    /**
+    Creates a shader resource from 2 text files.
+    TODO: Use proper file loading system
+    */
+    Resources::ResourceRef<ShaderRes> createShaderResource(const std::string& vert, const std::string& frag);
+
     struct ShaderRes: public Resources::Resource
     {
         FLUX_RESOURCE(ShaderRes, shader);
@@ -143,19 +151,31 @@ namespace Flux { namespace Renderer {
         std::string vert_src;
         std::string frag_src;
 
+        // Source files
+        std::string vert_fname;
+        std::string frag_fname;
+
         // TODO: Load this a much, much, much better way
         bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
         {
-            output->set(vert_src);
-            output->set(frag_src);
+            output->set(vert_fname);
+            output->set(frag_fname);
 
             return true;
         };
 
         virtual void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) override
         {
-            vert_src = file->get();
-            frag_src = file->get();
+            vert_fname = file->get();
+            frag_fname = file->get();
+
+            // Yes, this is basically the worst way possible to do this
+            // _but I don't care_
+            auto res = createShaderResource(vert_fname, frag_fname);
+            vert_src = res->vert_src;
+            frag_src = res->frag_src;
+
+            Resources::removeResource(res);
         };
     };
 
@@ -169,6 +189,37 @@ namespace Flux { namespace Renderer {
         Resources::ResourceRef<ShaderRes> shaders;
         std::map<std::string, Uniform> uniforms;
         bool changed;
+
+        ~MaterialRes()
+        {
+            // Deallocate uniforms
+            for (auto i : uniforms)
+            {
+                switch (i.second.type)
+                {
+                    case (UniformType::Bool):
+                        delete (bool*)i.second.value;
+                    
+                    case (UniformType::Float):
+                        delete (float*)i.second.value;
+
+                    case (UniformType::Int):
+                        delete (int*)i.second.value;
+
+                    case (UniformType::Mat4):
+                        delete (glm::mat4*)i.second.value;
+                    
+                    case (UniformType::Vector2):
+                        delete (glm::vec2*)i.second.value;
+                    
+                    case (UniformType::Vector3):
+                        delete (glm::vec3*)i.second.value;
+
+                    case (UniformType::Vector4):
+                        delete (glm::vec4*)i.second.value;
+                }
+            }
+        }
 
         bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
         {
@@ -406,12 +457,6 @@ namespace Flux { namespace Renderer {
     Also adds a transformation component
     */
     void addMesh(EntityRef entity, Resources::ResourceRef<MeshRes> mesh, Resources::ResourceRef<MaterialRes> material);
-
-    /**
-    Creates a shader resource from 2 text files.
-    TODO: Use proper file loading system
-    */
-    Resources::ResourceRef<ShaderRes> createShaderResource(const std::string& vert, const std::string& frag);
 
     /**
     Adds a material resource. This takes shaders

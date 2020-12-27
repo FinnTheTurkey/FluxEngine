@@ -52,6 +52,9 @@ Resources::ResourceRef<Flux::Renderer::ShaderRes> Flux::Renderer::createShaderRe
     sr->frag_src = temp_readFile(frag);
     sr->vert_src = temp_readFile(vert);
 
+    sr->vert_fname = vert;
+    sr->frag_fname = frag;
+
     return Resources::createResource(sr);
 }
 
