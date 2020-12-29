@@ -2,6 +2,7 @@
 #define FLUX_RENDERER_HH
 
 #include "Flux/ECS.hh"
+#include "Flux/Log.hh"
 #include "Flux/Resources.hh"
 
 // STL
@@ -126,7 +127,7 @@ namespace Flux { namespace Renderer {
 
     enum UniformType
     {
-        Int, Float, Vector2, Vector3, Vector4, Mat4, Bool
+        Int, Float, Vector2, Vector3, Vector4, Mat4, Bool, Texture
     };
 
     struct Uniform
@@ -155,7 +156,6 @@ namespace Flux { namespace Renderer {
         std::string vert_fname;
         std::string frag_fname;
 
-        // TODO: Load this a much, much, much better way
         bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
         {
             output->set(vert_fname);
@@ -164,7 +164,7 @@ namespace Flux { namespace Renderer {
             return true;
         };
 
-        virtual void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) override
+        void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) override
         {
             vert_fname = file->get();
             frag_fname = file->get();
@@ -180,6 +180,82 @@ namespace Flux { namespace Renderer {
     };
 
     /**
+    Texture Resource. Can either reference an internal file, or an external one
+    */
+    struct TextureRes: public Resources::Resource
+    {
+        FLUX_RESOURCE(TextureRes, texture);
+
+        std::string filename;
+        bool internal = false;
+
+        uint32_t image_data_size;
+        unsigned char* image_data;
+
+        uint32_t width;
+        uint32_t height;
+
+        /** Once the renderer has processed the texture, the data will be freed */
+        bool processed = false;
+
+        bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
+        {
+            if (processed && internal)
+            {
+                LOG_WARN("Texture has already been procesed, and data has been freed. Image will not be serialized");
+                return false;
+            }
+
+            output->set(internal);
+
+            if (!internal)
+            {
+                output->set(filename);
+            }
+            else
+            {
+                output->set(image_data_size);
+                output->set((char*)image_data, image_data_size);
+            }
+
+            output->set(width);
+            output->set(height);
+
+            return true;
+        }
+
+        void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) override
+        {
+            file->get(&internal);
+
+            if (!internal)
+            {
+                filename = file->get();
+
+                loadImage(filename);
+            }
+            else
+            {
+                file->get(&image_data_size);
+                image_data = new unsigned char[image_data_size];
+                file->get((char*)image_data, image_data_size);
+            }
+
+            file->get(&width);
+            file->get(&height);
+        }
+
+        void loadImage(const std::string& filename);
+
+        void destroy();
+
+        ~TextureRes()
+        {
+            destroy();
+        }
+    };
+
+    /**
     Material Resource
     */
     struct MaterialRes: public Resources::Resource
@@ -190,6 +266,9 @@ namespace Flux { namespace Renderer {
         std::map<std::string, Uniform> uniforms;
         bool changed;
 
+        bool has_texture = false;
+        Resources::ResourceRef<TextureRes> diffuse_texture;
+
         ~MaterialRes()
         {
             // Deallocate uniforms
@@ -199,24 +278,35 @@ namespace Flux { namespace Renderer {
                 {
                     case (UniformType::Bool):
                         delete (bool*)i.second.value;
+                        break;
                     
                     case (UniformType::Float):
                         delete (float*)i.second.value;
+                        break;
 
                     case (UniformType::Int):
                         delete (int*)i.second.value;
+                        break;
 
                     case (UniformType::Mat4):
                         delete (glm::mat4*)i.second.value;
+                        break;
                     
                     case (UniformType::Vector2):
                         delete (glm::vec2*)i.second.value;
+                        break;
                     
                     case (UniformType::Vector3):
                         delete (glm::vec3*)i.second.value;
+                        break;
 
                     case (UniformType::Vector4):
                         delete (glm::vec4*)i.second.value;
+                        break;
+                    
+                    case (UniformType::Texture):
+                        // No need
+                        break;
                 }
             }
         }
@@ -285,8 +375,20 @@ namespace Flux { namespace Renderer {
                     output->set((*((glm::mat4*)i.second.value))[3][2]);
                     output->set((*((glm::mat4*)i.second.value))[3][3]);
                     break;
+                
+                case (Texture):
+                    output->set(serializer->addResource(((Resources::ResourceRef<TextureRes>*)i.second.value)->getBaseEntity()));
+                    break;
                 }
             }
+
+            // Textures
+            // output->set(has_texture);
+
+            // if (has_texture)
+            // {
+            //     output->set(serializer->addResource(diffuse_texture.getBaseEntity()));
+            // }
 
             return true;
         };
@@ -382,6 +484,13 @@ namespace Flux { namespace Renderer {
                     file->get(&(*(mvalue))[3][3]);
                     uniforms[name] = Uniform {0, type, mvalue};
                     break;
+
+                case (Texture):
+                    uint32_t tvalue;
+                    file->get(&tvalue);
+                    auto tres = new Resources::ResourceRef<TextureRes>(deserializer->getResource(tvalue));
+                    uniforms[name] = Uniform {0, type, (void*)tres};
+                    break;
                 }
             }
 
@@ -451,6 +560,7 @@ namespace Flux { namespace Renderer {
     void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const int& v);
     void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const float& v);
     void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const bool& v);
+    void setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, Resources::ResourceRef<TextureRes> v);
 
     /**
     Links a mesh to an entity. Takes a MeshRes, a ShaderRes, and a MaterialRes.

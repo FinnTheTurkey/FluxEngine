@@ -75,7 +75,9 @@ ${GLFW_SOURCE}
 )
 
 target_include_directories(FluxEngine PUBLIC Include)
-# include_directories(Include)
+
+# STB
+target_include_directories(FluxEngine PUBLIC ThirdParty/Include)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)

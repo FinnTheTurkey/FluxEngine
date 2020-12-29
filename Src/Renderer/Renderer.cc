@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstring>
+#include "Flux/Log.hh"
 #include "Flux/Renderer.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Resources.hh"
@@ -9,6 +10,10 @@
 
 // STL includes
 #include <fstream>
+
+// STB
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
 
 using namespace Flux;
 
@@ -191,8 +196,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Int;
 
     // Allocate enw memory, and copy value into it
-    bool* value = (bool*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    int32_t* value = new int32_t;
+    int realv = v ? 1 : 0;
+    std::memcpy(value, &realv, sizeof(int32_t));
 
     us.value = value;
 
@@ -216,4 +222,55 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
 
     res->uniforms[name] = us;
     res->changed = true;
+}
+
+void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, Resources::ResourceRef<TextureRes> v)
+{
+    Uniform us;
+    us.location = -1;
+    us.type = UniformType::Texture;
+
+    // Create pointer version of ResourceRef
+    auto value = new Resources::ResourceRef<TextureRes>(v.getBaseEntity());
+
+    us.value = value;
+
+    res->uniforms[name] = us;
+    res->changed = true;
+}
+
+// =========================================================
+// Special functions in resources
+// =========================================================
+void Flux::Renderer::TextureRes::loadImage(const std::string& filename)
+{
+    int t_width, t_height, nr_channels;
+    stbi_set_flip_vertically_on_load(true);
+    image_data = (unsigned char*)stbi_load(filename.c_str(), &t_width, &t_height, &nr_channels, 0);
+
+    if (!image_data)
+    {
+        LOG_ERROR("Error: Could not load image at " + filename);
+    }
+
+    width = t_width;
+    height = t_height;
+    this->filename = filename;
+}
+
+void Flux::Renderer::TextureRes::destroy()
+{
+    if (!processed)
+    {
+        if (internal)
+        {
+            delete[] image_data;
+        }
+        else
+        {
+            stbi_image_free(image_data);
+        }
+
+        processed = true;
+    }
 }

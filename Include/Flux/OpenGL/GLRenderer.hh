@@ -4,6 +4,7 @@
 // Flux includes
 #include "Flux/ECS.hh"
 #include "Flux/Renderer.hh"
+#include "Flux/Resources.hh"
 #include "glm/fwd.hpp"
 
 // GL includes
@@ -59,6 +60,15 @@ namespace Flux { namespace GLRenderer {
 
         // Special high priority uniform locations
         uint32_t mvp_location;
+
+        uint32_t has_texture_location;
+    };
+    
+    /** Little struct for storing info on textures */
+    struct GLTextureStore
+    {
+        int location;
+        Flux::Resources::ResourceRef<Flux::Renderer::TextureRes> resource;
     };
 
     /**
@@ -78,6 +88,18 @@ namespace Flux { namespace GLRenderer {
         /** OpenGL handle for the uniform buffer */
         uint32_t handle;
 
+        /** Textures */
+        std::vector<GLTextureStore> textures;
+    };
+
+    /**
+    Component that keeps track of the GL Objects of textures
+    */
+    struct GLTextureCom: public Component
+    {
+        FLUX_COMPONENT(GLTextureCom, gltexture);
+
+        uint32_t handle;
     };
 
     /**
