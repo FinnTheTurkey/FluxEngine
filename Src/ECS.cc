@@ -27,6 +27,20 @@ Flux::ECSCtx::ECSCtx()
     system_count = 0;
 
     // We don't need to clean out systems
+    for (int i = 0; i < FLUX_MAX_SYSTEMS; i++)
+    {
+        systems[i] = SystemContainer {nullptr, -1, false};
+    }
+
+    for (int i = 0; i < FLUX_MAX_DESTRUCTION_QUEUE; i++)
+    {
+        destruction_queue[i] = 0;
+    }
+
+    for (int i = 0; i < FLUX_MAX_SYSTEM_QUEUE; i++)
+    {
+        system_queue[i] = 0;
+    }
 
     // Initialize reuse queue
     reuse = std::queue<int>();

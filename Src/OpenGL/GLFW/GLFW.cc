@@ -11,6 +11,11 @@ This file is where all the windowing related stuff will be stored for the GLFW b
 #include "Flux/Renderer.hh"
 #include "GLFW/glfw3.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 // STL
 #include <sstream>
 
@@ -51,6 +56,23 @@ void handleMouseMove(GLFWwindow* win, double x, double y)
     current_window->mouse_pos.y = y;
 }
 
+void (*func)();
+bool run_loop = false;
+
+void Flux::setMainLoopFunction(void (*fun)())
+{
+    func = fun;
+}
+
+void emRunMainloopFunc()
+{
+    if (run_loop)
+    {
+        func();
+    }
+    // return 1;
+}
+
 void Flux::GLRenderer::createWindow(const int &width, const int &height, const std::string &title)
 {
     if (current_window != nullptr)
@@ -68,6 +90,10 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
     gctx->mouse_mode = Input::MouseMode::Free;
     gctx->offset = glm::vec2();
     gctx->mouse_pos = glm::vec2();
+
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop(emRunMainloopFunc, -1000, 0);
+#endif
 
     // Create GLFW window
     glfwInit();
@@ -122,6 +148,11 @@ static glm::vec2 old_position = glm::vec2(0);
 
 void handleInputs()
 {
+    if (run_loop == false)
+    {
+        return;
+    }
+    
     double x, y;
     x = current_window->mouse_pos.x;
     y = current_window->mouse_pos.y;
@@ -177,20 +208,24 @@ void handleInputs()
     old_position.y = y;
 }
 
-void (*func)();
-
-void Flux::setMainLoopFunction(void (*fun)())
-{
-    func = fun;
-    
-}
-
 void Flux::runMainloop()
 {
+    run_loop = true;
+#ifdef __EMSCRIPTEN__
+    // emscripten_request_animation_frame_loop(emRunMainloopFunc, 0);
+#else
     while (!glfwWindowShouldClose(w->window))
     {
         func();
     }
+
+    end();
+
+    // Destroy resources before windows so opengl resource cleanup
+    // doesn't cause a segfault 'cause the window is gone
+    Flux::Resources::destroyResources();
+    Flux::GLRenderer::destroyWindow();
+#endif
 }
 
 bool Flux::GLRenderer::_windowStartFrame()

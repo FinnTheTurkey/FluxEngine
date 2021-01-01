@@ -2,7 +2,7 @@
 #define FLUX_HH
 
 #include "Flux/ECS.hh"
-#include "Flux/Threads.hh"
+// #include "Flux/Threads.hh"
 
 /**
  * Basic file which includes all the important components of flux
@@ -11,7 +11,7 @@
 
 namespace Flux
 {
-    extern Threads::ThreadCtx* threading_context;
+    // extern Threads::ThreadCtx* threading_context;
 
     void setMainLoopFunction(void (*fun)());
 

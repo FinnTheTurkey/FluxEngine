@@ -1,5 +1,6 @@
 #ifndef FLUX_RESOURCES_HH
 #define FLUX_RESOURCES_HH
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -226,6 +227,15 @@ namespace Flux { namespace Resources {
 
         /** Gets a singular entity from the Deserializer. Warning: This should only be called from the "deserialize" function */
         EntityRef getEntity(int id);
+
+        /** Returns the folder in which the archive is located */
+        std::filesystem::path getDirectory() const
+        {
+            return dir;
+        }
+
+        /** Destroyes all the resources loaded in by this Deserializer */
+        void destroyResources();
     
     private:
         FluxArc::Archive arc;
@@ -236,6 +246,8 @@ namespace Flux { namespace Resources {
         std::vector<bool> entity_done;
         std::vector<EntityRef> entitys;
         ECSCtx* current_ctx;
+
+        std::filesystem::path dir;
     };
 
 }}

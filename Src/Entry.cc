@@ -36,12 +36,13 @@ int main(int argc, char *argv[], char *envp[])
     // Mainloop
     Flux::runMainloop();
 
-    end();
+    // It is the responsability of the window to call end();
+    // end();
 
-    // Destroy resources before windows so opengl resource cleanup
-    // doesn't cause a segfault 'cause the window is gone
-    Flux::Resources::destroyResources();
-    Flux::GLRenderer::destroyWindow();
+    // // Destroy resources before windows so opengl resource cleanup
+    // // doesn't cause a segfault 'cause the window is gone
+    // Flux::Resources::destroyResources();
+    // Flux::GLRenderer::destroyWindow();
 
     // #ifndef FLUX_NO_THREADING
     // Flux::Threads::destroyThreads(Flux::threading_context);

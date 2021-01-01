@@ -145,6 +145,7 @@ void Serializer::save(FluxArc::Archive& arc, bool release = false)
 Deserializer::Deserializer(std::string filename)
 {
     arc = FluxArc::Archive(filename);
+    dir = std::filesystem::path(filename).parent_path();
 
     LOG_ASSERT_MESSAGE_FATAL(!arc.hasFile("--scene-properties--"), "Cannot Deserialize: Invalid File");
     auto pbf = arc.getBinaryFile("--scene-properties--");
@@ -205,6 +206,14 @@ Deserializer::~Deserializer()
         {
             delete j.second;
         }
+    }
+}
+
+void Deserializer::destroyResources()
+{
+    for (auto i : resources)
+    {
+        removeResource(i);
     }
 }
 

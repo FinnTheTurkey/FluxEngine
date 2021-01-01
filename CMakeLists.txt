@@ -32,17 +32,27 @@ add_compile_definitions(GLM_FORCE_CTOR_INIT)
 
 if (NOT DEFINED FLUX_BUILD_GLFW)
     set(FLUX_BUILD_GLFW ON)
+    # message("Building GLFW")
 endif()
 
+if (EMSCRIPTEN)
+    set(FLUX_INCLUDE_GLFW OFF)
+endif()
+
+if (FLUX_BUILD_GLFW)
+    if (NOT DEFINED FLUX_INCLUDE_GLFW)
+        set(FLUX_INCLUDE_GLFW ON)
+    endif()
+endif()
 # if (NOT DEFINED FLUX_USE_GLAD)
 #     set(FLUX_USE_GLAD ON)
 # endif()
 
-# if (FLUX_BUILD_GLFW)
-#     set(GLFW_SOURCE Src/OpenGL/GLFW/GLFW.cc)
-# endif()
+if (FLUX_BUILD_GLFW)
+    set(GLFW_SOURCE Src/OpenGL/GLFW/GLFW.cc)
+endif()
 
-add_library(FluxEngine 
+add_library(FluxEngine STATIC
 # Headers
 # ===================
 Include/Flux/Flux.hh
@@ -92,9 +102,11 @@ add_subdirectory(ThirdParty/term-colors)
 target_link_libraries(FluxEngine PUBLIC termcolors)
 
 # Open GL
-set(OpenGL_GL_PREFERENCE GLVND)
-find_package(OpenGL REQUIRED)
-target_link_libraries(FluxEngine PUBLIC OpenGL::GL)
+if (NOT EMSCRIPTEN)
+    set(OpenGL_GL_PREFERENCE GLVND)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(FluxEngine PUBLIC OpenGL::GL)
+endif()
 
 # if (FLUX_USE_GLAD)
 # Glad
@@ -105,7 +117,7 @@ target_link_libraries(FluxEngine PUBLIC ${CMAKE_DL_LIBS})
 #     add_compile_definitions(FLUX_NO_GLAD)
 # endif()
 
-if (FLUX_BUILD_GLFW)
+if (FLUX_INCLUDE_GLFW)
     # GLFW
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)

@@ -230,7 +230,7 @@ namespace Flux { namespace Renderer {
 
             if (!internal)
             {
-                filename = file->get();
+                filename = deserializer->getDirectory() / file->get();
 
                 loadImage(filename);
             }
@@ -772,6 +772,11 @@ namespace Transform
     Sets an entity as a camera. Can be used on any entity with the Transfrom component
     */
     void setCamera(EntityRef entity);
+
+    /**
+    Adds a transform component to the given entity, with a pos of 0, 0, 0
+    */
+    void giveTransform(EntityRef entity);
 
     /**
     Rotates an entity with the transform component

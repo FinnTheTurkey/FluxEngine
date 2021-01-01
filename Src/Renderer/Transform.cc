@@ -2,7 +2,9 @@
 #include "Flux/Log.hh"
 #include "Flux/Renderer.hh"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "glm/matrix.hpp"
+#include "glm/glm.hpp"
 
 #include <cstdio>
 #include <string>
@@ -33,7 +35,25 @@ void Flux::Transform::setCamera(EntityRef entity)
     }
 
     auto cc = new CameraCom;
+    cc->view_matrix = glm::mat4();
     entity.addComponent(cc);
+}
+
+void Transform::giveTransform(EntityRef entity)
+{
+    static float a[16] = {
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        0,0,0,1
+    };
+    auto tc = new Flux::Transform::TransformCom;
+    tc->transformation = glm::make_mat4(a);
+    tc->model_view = glm::make_mat4(a);
+    tc->has_parent = false;
+    tc->parent = EntityRef();
+
+    entity.addComponent(tc);
 }
 
 void Flux::Transform::rotate(EntityRef entity, const glm::vec3& axis, const float& angle_rad)
@@ -59,14 +79,6 @@ void Flux::Transform::rotate(EntityRef entity, const glm::vec3& axis, const floa
 
 void Flux::Transform::translate(EntityRef entity, const glm::vec3& offset)
 {
-    if (MeshComponentID == -1)
-    {
-        // Setup components
-        MeshComponentID = Flux::getComponentType("mesh");
-        TransformComponentID = Flux::getComponentType("transform");
-        CameraComponentID = Flux::getComponentType("camera");
-    }
-
     if (!entity.hasComponent<TransformCom>())
     {
         LOG_WARN("Transform component required for transformation");
@@ -74,8 +86,8 @@ void Flux::Transform::translate(EntityRef entity, const glm::vec3& offset)
     }
 
     auto tc = entity.getComponent<TransformCom>();
-    
-    tc->transformation = glm::translate(tc->transformation, offset);
+    auto o = glm::vec3(offset.x, offset.y, offset.z);
+    tc->transformation = glm::translate(tc->transformation, o);
 }
 
 void Flux::Transform::scale(EntityRef entity, const glm::vec3& scalar)
@@ -156,7 +168,13 @@ glm::mat4 getParentTransform(EntityRef entity)
     }
     else
     {
-        return glm::mat4();
+        static int a[16] = {
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+        };
+        return glm::make_mat4(a);
     }
 }
 
@@ -168,7 +186,8 @@ void Flux::Transform::CameraSystem::runSystem(EntityRef entity, float delta)
         auto tc = entity.getComponent<Transform::TransformCom>();
         auto cc = entity.getComponent<Transform::CameraCom>();
 
-        cc->view_matrix = glm::inverse(getParentTransform(entity));
+        auto actual = getParentTransform(entity);
+        cc->view_matrix = glm::inverse(actual);
 
         camera = entity;
     }
