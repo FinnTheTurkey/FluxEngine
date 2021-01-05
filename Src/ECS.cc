@@ -118,6 +118,12 @@ Entity* Flux::ECSCtx::getEntity(EntityRef entity)
 
 bool Flux::ECSCtx::destroyEntity(EntityRef entity)
 {
+    if (entity.getEntityID() == -1)
+    {
+        LOG_WARN("Warning: Attempting to remove inexistant entity");
+        return false;
+    }
+
     auto en = getEntity(entity);
 
     // Remove components
@@ -202,10 +208,12 @@ bool Flux::ECSCtx::_removeComponent(int entity, ComponentTypeID component_type)
 {
     // Run destructor
     auto er = EntityRef(this, entity);
-    if (component_destructors[component_type] != nullptr)
-    {
-        component_destructors[component_type](er);
-    }
+
+    // TODO: Fully kill the old destructors system
+    // if (component_destructors[component_type] != nullptr)
+    // {
+    //     component_destructors[component_type](er);
+    // }
 
     // Remove it
     auto comp = getEntity(er)->components[component_type];

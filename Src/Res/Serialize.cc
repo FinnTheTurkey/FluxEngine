@@ -226,7 +226,7 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
 
     // Create a new resource
     auto bf = arc.getBinaryFile("Resource-" + std::to_string(id));
-    
+
     std::string name = bf.get();
     uint32_t size;
     bf.get(&size);

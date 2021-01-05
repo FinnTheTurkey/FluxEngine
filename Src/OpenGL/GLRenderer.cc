@@ -32,21 +32,18 @@ static Flux::ComponentTypeID GLUniformComponentID;
 
 
 // Destructors
-void destructorGLMesh(Flux::EntityRef entity)
+GLMeshCom::~GLMeshCom()
 {
-    GLMeshCom* com = entity.getComponent<GLMeshCom>();
-
     // glDeleteProgram(com->shader_program);
-    glDeleteBuffers(1, &com->VAO);
-    glDeleteBuffers(1, &com->IBO);
-    glDeleteVertexArrays(1, &com->VAO);
+    glDeleteBuffers(1, &VAO);
+    glDeleteBuffers(1, &IBO);
+    glDeleteVertexArrays(1, &VAO);
 }
 
-void destructorGLShader(Flux::EntityRef entity)
+GLShaderCom::~GLShaderCom()
 {
-    GLShaderCom* com = entity.getComponent<GLShaderCom>();
 
-    glDeleteProgram(com->shader_program);
+    glDeleteProgram(shader_program);
     // glDeleteBuffers(1, &com->VAO);
     // glDeleteBuffers(1, &com->IBO);
     // glDeleteVertexArrays(1, &com->VAO);
@@ -70,9 +67,9 @@ void Flux::GLRenderer::_startGL()
     // GLUniformComponentID = Flux::getComponentType("gl_uniform");
 
     // Setup destructors
-    // TODO: Do this a better way, probably with templates
-    Flux::setComponentDestructor<GLMeshCom>(destructorGLMesh);
-    Flux::setComponentDestructor<GLShaderCom>(destructorGLShader);
+    // TODO: Replace this with struct destructors
+    // Flux::setComponentDestructor<GLMeshCom>(destructorGLMesh);
+    // Flux::setComponentDestructor<GLShaderCom>(destructorGLShader);
 }
 
 bool Flux::GLRenderer::startFrame()
@@ -459,6 +456,7 @@ void GLRendererSystem::onSystemStart()
 {
     // TODO: Customisable FOV
     projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
+    
 }
 
 void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
@@ -554,6 +552,7 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 
     dealWithUniforms(mesh, mat_res, shader_com);
 
+    glEnable(GL_DEPTH_TEST);
     glBindVertexArray(mesh_com->VAO);
     glDrawElements(GL_TRIANGLES, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);

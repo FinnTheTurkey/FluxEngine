@@ -41,6 +41,8 @@ namespace Flux { namespace GLRenderer {
     struct GLMeshCom: Component
     {
         FLUX_COMPONENT(GLMeshCom, glmesh);
+        ~GLMeshCom();
+
         uint32_t VBO;
         uint32_t IBO;
         uint32_t VAO;
@@ -55,6 +57,8 @@ namespace Flux { namespace GLRenderer {
     struct GLShaderCom: Component
     {
         FLUX_COMPONENT(GLShaderCom, glshader);
+        ~GLShaderCom();
+
         // Shader stuff
         uint32_t shader_program;
 
