@@ -1,9 +1,9 @@
 #ifndef FLUX_INPUT_HH
 #define FLUX_INPUT_HH
+#include "glm/fwd.hpp"
 
 /* Shamelessly stolen from glfw*/ 
 /* Printable keys */
-#include "glm/fwd.hpp"
 #define FLUX_KEY_SPACE              32
 #define FLUX_KEY_APOSTROPHE         39  /* ' */
 #define FLUX_KEY_COMMA              44  /* , */

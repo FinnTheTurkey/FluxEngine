@@ -25,7 +25,7 @@
 \
 std::string _flux_res_get_name() override { return #name;}\
 static inline bool _flux_res_registered = \
-Flux::Resources::registerResource(#name, (Flux::Resources::Resource*(*)())&type::_flux_res_create);
+Flux::Resources::registerResource(#name, (Flux::Resources::Resource*(*)())&type::_flux_res_create)
 
 namespace Flux { namespace Resources {
 

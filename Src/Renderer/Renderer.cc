@@ -17,8 +17,6 @@
 
 using namespace Flux;
 
-static Flux::ComponentTypeID MeshComponentID = -1;
-static Flux::ComponentTypeID TransformComponentID = -1;
 
 std::string temp_readFile(const std::string& filename)
 {
@@ -80,21 +78,14 @@ void Flux::Renderer::addMesh(EntityRef entity, Resources::ResourceRef<MeshRes> m
     // mc->shader_resource = shaders;
     mc->mat_resource = mat;
 
-    if (MeshComponentID == -1)
-    {
-        // Setup components
-        MeshComponentID = Flux::getComponentType("mesh");
-        TransformComponentID = Flux::getComponentType("transform");
-    }
-
-    Flux::Transform::TransformCom* tc = new Flux::Transform::TransformCom;
-    tc->transformation = glm::mat4();
-    tc->has_parent = false;
+    
 
     // Flux::addComponent(ctx, entity, MeshComponentID, mc);
     // Flux::addComponent(ctx, entity, TransformComponentID, tc);
     entity.addComponent(mc);
-    entity.addComponent(tc);
+    // entity.addComponent(tc);
+
+    Transform::giveTransform(entity);
 }
 
 void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const std::string& name, const glm::vec2& v)
@@ -106,8 +97,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Vector2;
 
     // Allocate enw memory, and copy value into it
-    glm::vec2* value = (glm::vec2*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    // glm::vec2* value = (glm::vec2*)std::malloc(sizeof(v));
+    // std::memcpy(value, &v, sizeof(v));
+    glm::vec2* value = new glm::vec2(v);
 
     us.value = value;
 
@@ -124,8 +116,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Vector3;
 
     // Allocate enw memory, and copy value into it
-    glm::vec3* value = (glm::vec3*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    // glm::vec3* value = (glm::vec3*)std::malloc(sizeof(v));
+    // std::memcpy(value, &v, sizeof(v));
+    glm::vec3* value = new glm::vec3(v);
 
     us.value = value;
 
@@ -142,8 +135,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Vector4;
 
     // Allocate enw memory, and copy value into it
-    glm::vec4* value = (glm::vec4*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    // glm::vec4* value = (glm::vec4*)std::malloc(sizeof(v));
+    // std::memcpy(value, &v, sizeof(v));
+    glm::vec4* value = new glm::vec4(v);
 
     us.value = value;
 
@@ -160,8 +154,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Float;
 
     // Allocate enw memory, and copy value into it
-    float* value = (float*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    // float* value = (float*)std::malloc(sizeof(v));
+    // std::memcpy(value, &v, sizeof(v));
+    float* value = new float(v);
 
     us.value = value;
 
@@ -178,8 +173,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Int;
 
     // Allocate enw memory, and copy value into it
-    int* value = (int*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    // int* value = (int*)std::malloc(sizeof(v));
+    int* value = new int(v);
+    // std::memcpy(value, &v, sizeof(v));
 
     us.value = value;
 
@@ -196,9 +192,9 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Int;
 
     // Allocate enw memory, and copy value into it
-    int32_t* value = new int32_t;
-    int realv = v ? 1 : 0;
-    std::memcpy(value, &realv, sizeof(int32_t));
+    int32_t* value = new int32_t(v);
+    // int realv = v ? 1 : 0;
+    // value = realv;
 
     us.value = value;
 
@@ -215,8 +211,8 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
     us.type = UniformType::Mat4;
 
     // Allocate enw memory, and copy value into it
-    glm::mat4* value = (glm::mat4*)std::malloc(sizeof(v));
-    std::memcpy(value, &v, sizeof(v));
+    glm::mat4* value = new glm::mat4(v);
+    // std::memcpy(value, &v, sizeof(v));
 
     us.value = value;
 
@@ -246,7 +242,7 @@ void Flux::Renderer::TextureRes::loadImage(const std::string& filename)
 {
     int t_width, t_height, nr_channels;
     stbi_set_flip_vertically_on_load(true);
-    image_data = (unsigned char*)stbi_load(filename.c_str(), &t_width, &t_height, &nr_channels, 0);
+    image_data = (unsigned char*)stbi_load(filename.c_str(), &t_width, &t_height, &nr_channels, 4);
 
     if (!image_data)
     {

@@ -2,6 +2,9 @@
 #define FLUX_HH
 
 #include "Flux/ECS.hh"
+#include "Flux/Resources.hh"
+#include "Flux/Renderer.hh"
+
 // #include "Flux/Threads.hh"
 
 /**

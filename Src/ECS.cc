@@ -111,9 +111,37 @@ EntityRef Flux::ECSCtx::createEntity()
     return EntityRef(this, entity_id);
 }
 
+EntityRef Flux::ECSCtx::createNamedEntity(const std::string& name)
+{
+    auto entity = createEntity();
+    auto nc = new NameCom;
+    nc->name = name;
+    entity.addComponent(nc);
+
+    return entity;
+}
+
 Entity* Flux::ECSCtx::getEntity(EntityRef entity)
 {
     return entities[entity.getEntityID()];
+}
+
+EntityRef Flux::ECSCtx::getNamedEntity(const std::string &name)
+{
+    for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
+    {
+        auto er = EntityRef(this, i);
+        if (er.hasComponent<NameCom>())
+        {
+            if (er.getComponent<NameCom>()->name == name)
+            {
+                return er;
+            }
+        }
+    }
+    
+    LOG_WARN("Could not find entity with name " + name);
+    return EntityRef();
 }
 
 bool Flux::ECSCtx::destroyEntity(EntityRef entity)
@@ -174,7 +202,7 @@ bool Flux::ECSCtx::destroyQueuedEntities()
 
 void Flux::_setComponentDestructor(ComponentTypeID component, void (*function)(EntityRef))
 {
-    component_destructors[component] = function;
+    // component_destructors[component] = function;
 }
 
 void Flux::ECSCtx::_addComponent(int entity, ComponentTypeID component_type, Component* component)

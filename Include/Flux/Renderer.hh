@@ -39,9 +39,14 @@ namespace Flux { namespace Renderer {
         float ty;
     };
 
+    enum DrawMode
+    {
+        Triangles, Lines
+    };
+
     /**
     Renderer-independant mesh component which stores all the data nessesary to render the defined mesh
-    TODO: Make this point to the same instance if there are multiple copies of a mesh
+    TODO: Make it deallocate memory after the mesh is on the gpu
     */
     struct MeshRes: public Resources::Resource
     {
@@ -58,6 +63,9 @@ namespace Flux { namespace Renderer {
         Array of indices in the mesh. See vertices_len for length
         */
         uint32_t* indices;
+
+        /** How to draw the mesh */
+        DrawMode draw_mode;
 
         // Functions
         ~MeshRes()
@@ -93,6 +101,8 @@ namespace Flux { namespace Renderer {
                 output->set(indices[i]);
             }
 
+            output->set((int)draw_mode);
+
             return true;
         };
 
@@ -122,6 +132,10 @@ namespace Flux { namespace Renderer {
             {
                 file->get(&indices[i]);
             }
+
+            int i;
+            file->get(&i);
+            draw_mode = (DrawMode)i;
         };
     };
 
@@ -599,6 +613,8 @@ namespace Transform
         bool has_parent;
         EntityRef parent;
 
+        bool visible;
+
         bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
         {
             // TODO: Do this a better way
@@ -623,33 +639,14 @@ namespace Transform
             output->set(transformation[3][2]);
             output->set(transformation[3][3]);
 
-            // Model View
-            output->set(model_view[0][0]);
-            output->set(model_view[0][1]);
-            output->set(model_view[0][2]);
-            output->set(model_view[0][3]);
-
-            output->set(model_view[1][0]);
-            output->set(model_view[1][1]);
-            output->set(model_view[1][2]);
-            output->set(model_view[1][3]);
-
-            output->set(model_view[2][0]);
-            output->set(model_view[2][1]);
-            output->set(model_view[2][2]);
-            output->set(model_view[2][3]);
-
-            output->set(model_view[3][0]);
-            output->set(model_view[3][1]);
-            output->set(model_view[3][2]);
-            output->set(model_view[3][3]);
-
             // Parent
             output->set(has_parent);
             if (has_parent)
             {
                 output->set(serializer->addEntity(parent));
             }
+
+            output->set(visible ? 1 : 0);
 
             return true;
         }
@@ -679,25 +676,7 @@ namespace Transform
             output->get(&transformation[3][3]);
 
             // Model view
-            output->get(&model_view[0][0]);
-            output->get(&model_view[0][1]);
-            output->get(&model_view[0][2]);
-            output->get(&model_view[0][3]);
-
-            output->get(&model_view[1][0]);
-            output->get(&model_view[1][1]);
-            output->get(&model_view[1][2]);
-            output->get(&model_view[1][3]);
-
-            output->get(&model_view[2][0]);
-            output->get(&model_view[2][1]);
-            output->get(&model_view[2][2]);
-            output->get(&model_view[2][3]);
-
-            output->get(&model_view[3][0]);
-            output->get(&model_view[3][1]);
-            output->get(&model_view[3][2]);
-            output->get(&model_view[3][3]);
+            model_view = glm::mat4();
 
             // Parent
             output->get(&has_parent);
@@ -707,6 +686,18 @@ namespace Transform
                 output->get(&pnum);
 
                 parent = derializer->getEntity(pnum);
+            }
+
+            int n;
+            output->get(&n);
+
+            if (n == 0)
+            {
+                visible = false;
+            }
+            else
+            {
+                visible = true;
             }
         }
     };
@@ -773,6 +764,17 @@ namespace Transform
     */
     void setCamera(EntityRef entity);
 
+    /** Get the global transformation matrix for an entity */
+    glm::mat4 getParentTransform(EntityRef entity);
+
+    void setVisible(EntityRef entity, bool vis);
+
+    /**
+    Sets whether an entity can be seen.
+    If an entity is invisible, all it's descendants are also invisible.
+    */
+    bool getVisibility(EntityRef entity);
+
     /**
     Adds a transform component to the given entity, with a pos of 0, 0, 0
     */
@@ -784,9 +786,19 @@ namespace Transform
     void rotate(EntityRef entity, const glm::vec3& axis, const float& angle_rad);
 
     /**
+    Rotates an entity on a global axis
+    */
+    void rotateGlobalAxis(EntityRef entity, const glm::vec3& axis, const float& angle_rad);
+
+    /**
     Move (or translates) an entity by offset
     */
     void translate(EntityRef entity, const glm::vec3& offset);
+
+    /**
+    Move (or translates) an entity by an offset in global space
+    */
+    void globalTranslate(EntityRef entity, const glm::vec3& offset);
 
     /**
     Scales an entity by the given scalar
@@ -800,6 +812,11 @@ namespace Transform
     Get the current translation (in local space if parented)
     */
     glm::vec3 getTranslation(EntityRef entity);
+
+    /**
+    Get the current translation in global space
+    */
+    glm::vec3 getGlobalTranslation(EntityRef entity);
 
     /**
     Set the current translation (in local space if parented)

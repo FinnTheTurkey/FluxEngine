@@ -13,6 +13,7 @@
 #include <string>
 #include <sstream>
 
+#include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/trigonometric.hpp"
 
@@ -22,31 +23,19 @@ using namespace Flux::GLRenderer;
 // We need this for callbacks
 // static GLCtx* current_window = nullptr;
 
-static Flux::ComponentTypeID MeshComponentID;
-static Flux::ComponentTypeID TransformComponentID;
-static Flux::ComponentTypeID GLMeshComponentID;
-static Flux::ComponentTypeID GLEntityComponentID;
-static Flux::ComponentTypeID TempShaderComponentID;
-static Flux::ComponentTypeID GLShaderComponentID;
-static Flux::ComponentTypeID GLUniformComponentID;
-
-
 // Destructors
 GLMeshCom::~GLMeshCom()
 {
-    // glDeleteProgram(com->shader_program);
-    glDeleteBuffers(1, &VAO);
+    // TODO: Figure out why this line was breaking everything
+    // glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &IBO);
-    glDeleteVertexArrays(1, &VAO);
 }
 
 GLShaderCom::~GLShaderCom()
 {
 
     glDeleteProgram(shader_program);
-    // glDeleteBuffers(1, &com->VAO);
-    // glDeleteBuffers(1, &com->IBO);
-    // glDeleteVertexArrays(1, &com->VAO);
 }
 
 void Flux::GLRenderer::_startGL()
@@ -56,20 +45,6 @@ void Flux::GLRenderer::_startGL()
     // Create viewport
     glViewport(0, 0, current_window->width, current_window->height);
     glEnable(GL_DEPTH_TEST);
-
-    // Load IDs for components
-    // MeshComponentID = Flux::getComponentType("mesh");
-    // TransformComponentID = Flux::getComponentType("transform");
-    // GLMeshComponentID = Flux::getComponentType("gl_mesh");
-    // GLEntityComponentID = Flux::getComponentType("gl_entity");
-    // TempShaderComponentID = Flux::getComponentType("temp_shader");
-    // GLShaderComponentID = Flux::getComponentType("gl_shader");
-    // GLUniformComponentID = Flux::getComponentType("gl_uniform");
-
-    // Setup destructors
-    // TODO: Replace this with struct destructors
-    // Flux::setComponentDestructor<GLMeshCom>(destructorGLMesh);
-    // Flux::setComponentDestructor<GLShaderCom>(destructorGLShader);
 }
 
 bool Flux::GLRenderer::startFrame()
@@ -87,7 +62,7 @@ void Flux::GLRenderer::endFrame()
     _windowEndFrame();
 }
 
-static glm::mat4 projection;
+// static glm::mat4 projection;
 
 void processTexture(Flux::Resources::ResourceRef<Flux::Renderer::TextureRes> texture)
 {
@@ -133,55 +108,6 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         {
             uni = new GLUniformCom;
 
-            // Get nessesary data
-            // std::vector<const char*> names;
-            // int count = 0;
-
-            // for (auto it = mat_res->uniforms.begin(); it != mat_res->uniforms.end(); ++it)
-            // {
-            //     names.push_back(const_cast<char*>(it->first.c_str()));
-            //     if (it->second.type != Renderer::UniformType::Texture)
-            //     {
-            //         count ++;
-            //     }
-            // }
-
-            // Request block size from opengl
-            // uint32_t block_index = glGetUniformBlockIndex(shader_res->shader_program, "Material");
-            // LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "OpenGL Error: Invalid Operation: Could not find shader program");
-            // LOG_ASSERT_MESSAGE(block_index == GL_INVALID_INDEX, "OpenGL Error: Invalid Index: Could not find uniform block");
-            // glGetActiveUniformBlockiv(shader_res->shader_program, block_index, GL_UNIFORM_BLOCK_DATA_SIZE, &uni->block_size);
-            // LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "OpenGL Error: GL_INVALID_VALUE: Could not find uniform block; make sure your shader has a uniform called Material");
-
-            // // Request indices from OpenGL
-            // uni->indices.resize(count);
-            // glGetUniformIndices(shader_res->shader_program, count, &names[0], &uni->indices[0]);
-            // LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "OpenGL Error: GL_INVALID_OPERATION: Shader program is not valid. This is most likely an engine problem");
-
-            // int num = 0;
-            // for (auto i : uni->indices)
-            // {
-            //     if (i == GL_INVALID_INDEX)
-            //     {
-            //         LOG_ERROR("Matching index for uniform " + std::string(names[num]) + " could not be found");
-            //     }
-            //     num++;
-            // }
-
-            // Request offset from OpenGL
-            // TODO: Use this function to get list of types for error checking
-            // uni->offset.resize(count);
-            // glGetActiveUniformsiv(shader_res->shader_program, count, &uni->indices[0], GL_UNIFORM_OFFSET, &uni->offset[0]);
-
-            // TODO: The above function always seems to generate a GL_INVALID_VALUE
-            // I have no clue why
-            // But everything still works
-            // I'm sure this will come back to bite me later
-            
-            // LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Error: Too many uniforms");
-
-            // Flux::addComponent(Flux::Resources::rctx, mesh->mat_resource, GLUniformComponentID, uni);
-
             uni->block_size = glGetUniformBlockIndex(shader_res->shader_program, "Material");
             glUniformBlockBinding(shader_res->shader_program, uni->block_size, 0);
             mesh->mat_resource.getBaseEntity().addComponent(uni);
@@ -206,7 +132,7 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
                 }
             }
 
-            auto mc = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
+            // auto mc = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
 
             // glBindVertexArray(mc->VAO);
             glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
@@ -342,7 +268,7 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
                 case (6): tx = GL_TEXTURE6; break;
                 case (7): tx = GL_TEXTURE7; break;
                 case (8): tx = GL_TEXTURE8; break;
-                default: LOG_WARN("Too many textures!"); break;
+                default: LOG_WARN("Too many textures!"); tx = 0; break;
             }
 
             glActiveTexture(tx);
@@ -524,6 +450,16 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
             mesh_com->num_vertices = mesh_res->vertices_length;
             mesh_com->num_indices = mesh_res->indices_length;
 
+            // Set draw mode
+            if (mesh_res->draw_mode == Renderer::DrawMode::Triangles)
+            {
+                mesh_com->draw_type = GL_TRIANGLES;
+            }
+            else
+            {
+                mesh_com->draw_type = GL_LINES;
+            }
+
             // Add to resource entity
             // Flux::addComponent(Flux::Resources::rctx, mesh->mesh_resource, GLMeshComponentID, mesh_com);
             mesh->mesh_resource.getBaseEntity().addComponent(mesh_com);
@@ -541,8 +477,12 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
     GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
     Flux::Transform::TransformCom* trans_com = entity.getComponent<Flux::Transform::TransformCom>();
 
-    // TODO: Probably put this in a better place
-    // And do it in a better way
+    // TODO: Try to make this more efficient
+    if (!Flux::Transform::getVisibility(entity))
+    {
+        // Don't actually render
+        return;
+    }
 
     glUseProgram(shader_com->shader_program);
 
@@ -554,74 +494,13 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(mesh_com->VAO);
-    glDrawElements(GL_TRIANGLES, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
+    glDrawElements(mesh_com->draw_type, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 
 }
 
-int Flux::GLRenderer::addGLRenderer(ECSCtx *ctx)
+int Flux::GLRenderer::addGLRenderer(ECSCtx* ctx)
 {
     // LOG_INFO("Adding GL Renderer system");
     return ctx->addSystemBack(new GLRendererSystem, false);
 }
-
-
-
-// std::map<std::string, int> uniform_locations;
-
-// GLint Flux::GLRenderer::getUniformLocation(const std::string name) 
-// {
-//     std::map<std::string, GLint>::iterator it = uniform_locations.find(name);
-//     if (it == uniform_locations.end())
-//     {
-//         uniform_locations[name] = glGetUniformLocation(handle, name.c_str());
-//     }
-
-//     return uniform_locations[name];
-//     // return glGetUniformLocation(handle, name.c_str());
-// }
-
-int getUniformLocation(const std::string& name)
-{
-    LOG_WARN("This is currently broken");
-    return -1;
-}
-
-// void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec2& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform2f(loc, v.x, v.y);
-// }
-// void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec3& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform3f(loc, v.x, v.y, v.z);
-// }
-// void Flux::GLRenderer::setUniform(const std::string& name, const glm::vec4& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform4f(loc, v.x, v.y, v.z, v.w);
-// }
-// void Flux::GLRenderer::setUniform(const std::string& name, const glm::mat4& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(v));
-// }
-
-// void Flux::GLRenderer::setUniform(const std::string& name, const int& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform1i(loc, v);
-// }
-
-// void Flux::GLRenderer::setUniform(const std::string& name, const float& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform1f(loc, v);
-// }
-
-// void Flux::GLRenderer::setUniform(const std::string& name, const bool& v)
-// {
-//     GLint loc = getUniformLocation(name);
-//     glUniform1i(loc, v);
-// }

@@ -7,10 +7,11 @@ include(CTest)
 enable_testing()
 
 # Enable hell
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra") # -Weverything")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic") # -Wextra -Weverything")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=bounds")
 
 if (FLUX_GCC_PROFILE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -fstack-protector-strong")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
 endif()
 
@@ -128,8 +129,9 @@ if (FLUX_INCLUDE_GLFW)
 endif()
 
 # GLM
-add_subdirectory(ThirdParty/glm)
-target_link_libraries(FluxEngine PUBLIC glm)
+# add_subdirectory(ThirdParty/glm)
+# target_link_libraries(FluxEngine PUBLIC glm)
+target_include_directories(FluxEngine PUBLIC ThirdParty/glm)
 
 # FluxArc
 # Add FluxARC

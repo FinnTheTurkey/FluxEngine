@@ -40,7 +40,7 @@
 \
 static std::string _flux_get_name() { return #name;}\
 static inline bool _flux_registered = \
-Flux::registerComponent(#name, (Flux::Component*(*)())&type::_flux_create);
+Flux::registerComponent(#name, (Flux::Component*(*)())&type::_flux_create)
 
 
 namespace FluxTypes
@@ -59,7 +59,7 @@ namespace Flux
 
     
     // Pre-definitions
-    struct ECSCtx;
+    class ECSCtx;
     namespace Resources
     {
         class Serializer;
@@ -81,6 +81,8 @@ namespace Flux
         */
         virtual bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) { return false; };
         virtual void deserialize(Resources::Deserializer* deserializer, FluxArc::BinaryFile* file) {};
+
+        virtual ~Component() {}
     };
 
     /**
@@ -131,7 +133,7 @@ namespace Flux
         /**
         Array of all entities. An EntityID is an index in this array
         */
-        Entity *entities[FLUX_MAX_ENTITIES];
+        Entity* entities[FLUX_MAX_ENTITIES];
 
         /* ID to be used for the next Entity if the reuse queue is empty*/
         int current_id;
@@ -189,6 +191,11 @@ namespace Flux
         EntityRef createEntity();
 
         /**
+        Creates an Entity with a NameCom
+        */
+        EntityRef createNamedEntity(const std::string& name);
+
+        /**
         Removes an Entity from the ECS. Once an Entity is removed, it is gone.
         Its EntityID will be reused, so be sure to remove all references to it
         */
@@ -212,6 +219,13 @@ namespace Flux
         Returns _nullptr_ if it cannot find entity
         */
         Entity* getEntity(EntityRef entity);
+
+        /**
+        Gets an Entity with a matching name.
+        Warns and returns empty entity of named entity could not be found
+        NOTE: This functon is slow and should not be sued every frame
+        */
+        EntityRef getNamedEntity(const std::string& name);
 
 
         // Component Section
@@ -299,7 +313,7 @@ namespace Flux
     inline std::map<std::string, ComponentTypeID> component_types;
     inline std::map<std::string, Component*(*)()> component_factory;
     inline ComponentTypeID on = 0;
-    inline void (*component_destructors[FLUX_MAX_COMPONENTS])(EntityRef entity);
+    // inline void (*component_destructors[FLUX_MAX_COMPONENTS])(EntityRef entity);
 
     /**
     Returns the ID of the given component type, or creates it if it doesn't exist
@@ -327,7 +341,7 @@ namespace Flux
         component_types[name] = next;
 
         // Zero the destructor
-        component_destructors[next] = nullptr;
+        // component_destructors[next] = nullptr;
 
         // LOG_INFO("Got component type for component " + name);
 
@@ -409,25 +423,31 @@ namespace Flux
         }
     
     public:
-        EntityRef()
+        EntityRef():
+        ctx(nullptr),
+        entity_id(-1)
         {
-            // For before it is filled up
-            entity_id = -1;
-            ctx = nullptr;
         }
 
         EntityRef(ECSCtx* ctx_a, int entity_id_a):
-        entity_id(entity_id_a),
-        ctx(ctx_a)
+        ctx(ctx_a),
+        entity_id(entity_id_a)
         {
         }
 
-        EntityRef(const EntityRef& ref)
-        {
-            entity_id = ref.entity_id;
-            ctx = ref.ctx;
-        }
+        // EntityRef(const EntityRef& ref):
+        // ctx(ref.ctx),
+        // entity_id(ref.entity_id)
+        // {
+        //     // entity_id = ref.entity_id;
+        //     // ctx = ref.ctx;
+        // }
         ~EntityRef() {};
+
+        // constexpr Flux::EntityRef& operator = (const Flux::EntityRef& entity)
+        // {
+        //     return *this;
+        // }
 
         // Getters
 
@@ -497,6 +517,26 @@ namespace Flux
         {
             return a.getEntityID() == b.getEntityID();
         }
+    };
+
+
+    // Useful components
+    struct NameCom : public Component
+    {
+        FLUX_COMPONENT(NameCom, name);
+
+        bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
+        {
+            output->set(name);
+            return true;
+        }
+
+        void deserialize(Resources::Deserializer *deserializer, FluxArc::BinaryFile *file) override
+        {
+            name = file->get();
+        }
+
+        std::string name;
     };
 
 };
