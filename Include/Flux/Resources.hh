@@ -176,27 +176,55 @@ namespace Flux { namespace Resources {
     */
     Resource* ext_createTextResource(std::ifstream* file);
 
-    // ===================================
+    // ===================================================
     // Serialization and deserialization
-    // ===================================
-    
+    // ===================================================
+
+    /*
+    The "Inheritance ID" system
+    Each scene has seperate inheritance ids
+    By default, the inheritance id equals the entity id
+    But it can also be set manually
+    If an entity in a scene has a parent, it will have the parent's entity ID
+    Otherwise, it will just have 0
+    Some smart importer, like the Assimp importer, might assign manual ids to make inheritance work
+    Its ids would come from names, so if the asset was re-imported, it would remain linked
+    */
+
+    // Component for keeping track of where entities came from
+    struct SerializeCom: public Flux::Component
+    {
+        FLUX_COMPONENT(SerializeCom, SerializeCom);
+
+        // Ironically, we're not actually serializing this component
+        // Its data will be stored somewhere where it's easier to access
+
+        // TODO: Maybe make this a number/id rather than a string
+        std::string inherited_file;
+
+        /** This entity's inheritance ID */
+        uint32_t inheritance_id;
+    };
+
     /** Class to aid serialization. You put in Entities, it puts them into a file */
     class Serializer
     {
     public:
-        Serializer();
+        Serializer(const std::string& filename);
 
         /**
         Add an Entity to the file
         Returns an int that can be put in a BinaryFile to get that Resource
+        Optional "inheritance id" for entities and resources were order is not guarenteed
         */
-        uint32_t addEntity(EntityRef entity);
+        uint32_t addEntity(EntityRef entity, uint32_t ihid=0);
 
         /**
         Adds a resource to the file as a dependency.
         Returns an int that can be put in a BinaryFile to get that Resource
+        Optional "inheritance id" for entities and resources were order is not guarenteed
         */
-        uint32_t addResource(ResourceRef<Resource> res);
+        uint32_t addResource(ResourceRef<Resource> res, uint32_t ihid=0);
 
         /** Saves the Entities and Resources to a file */
         void save(FluxArc::Archive& arc, bool release);
@@ -204,6 +232,11 @@ namespace Flux { namespace Resources {
     private:
         std::vector<EntityRef> entities;
         std::vector<ResourceRef<Resource>> resources;
+        std::vector<uint32_t> resource_ihids;
+
+        std::map<std::string, int> name_count;
+
+        std::string fname;
     };
 
     struct EntityData
@@ -216,7 +249,7 @@ namespace Flux { namespace Resources {
     class Deserializer
     {
     public:
-        Deserializer(std::string filename);
+        Deserializer(const std::string& filename);
         ~Deserializer();
 
         /** Add all of the Entities from the file to an ECSCtx. Returns a vector if EntityRefs */
@@ -224,6 +257,9 @@ namespace Flux { namespace Resources {
 
         /** Get a resource from the deserializer */
         ResourceRef<Resource> getResource(uint32_t id);
+
+        /** Get a resource from the deserializer, using it's Inheritance ID */
+        ResourceRef<Resource> getResourceByIHID(uint32_t ihid);
 
         /** Gets a singular entity from the Deserializer. Warning: This should only be called from the "deserialize" function */
         EntityRef getEntity(int id);
@@ -242,13 +278,18 @@ namespace Flux { namespace Resources {
         std::vector<EntityData> entities;
         std::vector<bool> resource_done;
         std::vector<ResourceRef<Resource>> resources;
+        std::map<uint32_t, uint32_t> ihid_table;
 
         std::vector<bool> entity_done;
         std::vector<EntityRef> entitys;
         ECSCtx* current_ctx;
 
         std::filesystem::path dir;
+        std::filesystem::path fname;
     };
+
+    inline std::map<std::string, Deserializer*> loaded_files;
+    Deserializer* deserialize(const std::string& filename, bool reload = false);
 
 }}
 

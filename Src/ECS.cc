@@ -237,7 +237,6 @@ bool Flux::ECSCtx::_removeComponent(int entity, ComponentTypeID component_type)
     // Run destructor
     auto er = EntityRef(this, entity);
 
-    // TODO: Fully kill the old destructors system
     // if (component_destructors[component_type] != nullptr)
     // {
     //     component_destructors[component_type](er);

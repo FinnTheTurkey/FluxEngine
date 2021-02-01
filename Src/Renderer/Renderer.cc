@@ -78,8 +78,6 @@ void Flux::Renderer::addMesh(EntityRef entity, Resources::ResourceRef<MeshRes> m
     // mc->shader_resource = shaders;
     mc->mat_resource = mat;
 
-    
-
     // Flux::addComponent(ctx, entity, MeshComponentID, mc);
     // Flux::addComponent(ctx, entity, TransformComponentID, tc);
     entity.addComponent(mc);

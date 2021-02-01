@@ -3,18 +3,19 @@
 #include "Flux/Resources.hh"
 #include "FluxArc/FluxArc.hh"
 #include <algorithm>
+#include <filesystem>
 #include <queue>
 #include <string>
 
 using namespace Flux::Resources;
 
-Serializer::Serializer()
-: entities(), resources()
+Serializer::Serializer(const std::string& filename)
+: entities(), resources(), name_count(), fname(filename)
 {
 
 }
 
-uint32_t Serializer::addEntity(EntityRef entity)
+uint32_t Serializer::addEntity(EntityRef entity, uint32_t ihid)
 {
     if (std::find(entities.begin(), entities.end(), entity) != entities.end())
     {
@@ -25,10 +26,11 @@ uint32_t Serializer::addEntity(EntityRef entity)
 
     // Add to vector
     entities.push_back(entity);
+
     return entities.size()-1;
 }
 
-uint32_t Serializer::addResource(ResourceRef<Resource> res)
+uint32_t Serializer::addResource(ResourceRef<Resource> res, uint32_t ihid)
 {
     if (std::find(resources.begin(), resources.end(), res) != resources.end())
     {
@@ -39,6 +41,14 @@ uint32_t Serializer::addResource(ResourceRef<Resource> res)
 
     // Add to vector
     resources.push_back(res);
+
+    if (ihid == 0)
+    {
+        // Automatically assign Inheritance ID
+        ihid = resources.size();
+    }
+    resource_ihids.push_back(ihid);
+
     return resources.size()-1;
 }
 
@@ -111,27 +121,57 @@ void Serializer::save(FluxArc::Archive& arc, bool release = false)
 
         // Serialize
         FluxArc::BinaryFile bf, en;
-        bool out = resources[j]->serialize(this, &bf);
 
-        if (out)
+        if (resources[j].getBaseEntity().hasComponent<SerializeCom>())
         {
-            // They want it, so save it in a file
-            en.set(resources[j]->_flux_res_get_name());
-            en.set(bf.getSize());
-            en.set(bf.getDataPtr(), bf.getSize());
+            // It came from a file, so just link back to that one
+            en.set(true);
+            auto sc = resources[j].getBaseEntity().getComponent<SerializeCom>();
+
+            // Make sure the path is relative to the current file
+            std::string relative_fname = std::filesystem::relative(sc->inherited_file, std::filesystem::path(fname).parent_path());
+            en.set(relative_fname);
+            en.set(sc->inheritance_id);
         }
         else
         {
-            en.set("...");
-            en.set(-1);
+            en.set(false);
+            bool out = resources[j]->serialize(this, &bf);
+
+            if (out)
+            {
+                // They want it, so save it in a file
+                en.set(resources[j]->_flux_res_get_name());
+                en.set(bf.getSize());
+                en.set(bf.getDataPtr(), bf.getSize());
+            }
+            else
+            {
+                en.set("...");
+                en.set(-1);
+            }
         }
 
         arc.setFile("Resource-" + std::to_string(j), en, true, release);
-        // arc.setFile("Resource-" + std::to_string(j), en, false, release);
 
         j++;
         it2++;
     }
+
+    // Serialize Inheritance ID Table
+    FluxArc::BinaryFile ihid_table;
+
+    // Pre-allocate to save time
+    ihid_table.allocate(sizeof(uint32_t) * 2 * resources.size());
+
+    for (uint32_t i = 0; i < resources.size(); i++)
+    {
+        ihid_table.set(i);
+        ihid_table.set(resource_ihids[i]);
+    }
+
+    arc.setFile("--ihid-table--", ihid_table);
+    // TODO: Deal with link resources
 
     FluxArc::BinaryFile properties;
 
@@ -142,10 +182,36 @@ void Serializer::save(FluxArc::Archive& arc, bool release = false)
     arc.setFile("--scene-properties--", properties);
 }
 
-Deserializer::Deserializer(std::string filename)
+Deserializer* Flux::Resources::deserialize(const std::string& filename, bool reload)
 {
-    arc = FluxArc::Archive(filename);
+    if (!reload)
+    {
+        if (loaded_files.find(filename) != loaded_files.end())
+        {
+            // We have already loaded this file
+            return loaded_files[filename];
+        }
+    }
+    else
+    {
+        if (loaded_files.find(filename) != loaded_files.end())
+        {
+            loaded_files[filename]->destroyResources();
+            delete loaded_files[filename];
+        }
+    }
+
+    auto ds = new Deserializer(filename);
+    loaded_files[filename] = ds;
+
+    return ds;
+}
+
+Deserializer::Deserializer(const std::string& filename)
+:arc(filename)
+{
     dir = std::filesystem::path(filename).parent_path();
+    fname = std::filesystem::path(filename);
 
     LOG_ASSERT_MESSAGE_FATAL(!arc.hasFile("--scene-properties--"), "Cannot Deserialize: Invalid File");
     auto pbf = arc.getBinaryFile("--scene-properties--");
@@ -153,6 +219,18 @@ Deserializer::Deserializer(std::string filename)
     uint32_t entity_count, resource_count;
     pbf.get<uint32_t>(&entity_count);
     pbf.get<uint32_t>(&resource_count);
+
+    // Load IHID Table
+    auto ihid_bf = arc.getBinaryFile("--ihid-table--");
+
+    for (int i = 0; i < resource_count; i++)
+    {
+        uint32_t resid, ihid;
+        ihid_bf.get(&resid);
+        ihid_bf.get(&ihid);
+
+        ihid_table[ihid] = resid;
+    }
 
     // Entities will be created on the fly
     // Which is why heavy data should _always_ be in a resource
@@ -196,6 +274,9 @@ Deserializer::Deserializer(std::string filename)
         getResource(i);
     }
 
+    arc = FluxArc::Archive();
+    LOG_INFO("Deserialized file " + filename);
+
 }
 
 Deserializer::~Deserializer()
@@ -207,13 +288,19 @@ Deserializer::~Deserializer()
             delete j.second;
         }
     }
+
+    LOG_INFO("Destroyed file " + fname.string());
 }
 
 void Deserializer::destroyResources()
 {
+    auto file = std::filesystem::absolute(fname);
     for (auto i : resources)
     {
-        removeResource(i);
+        if (i.getBaseEntity().getComponent<SerializeCom>()->inherited_file == file)
+        {
+            removeResource(i);
+        }
     }
 }
 
@@ -227,27 +314,73 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
     // Create a new resource
     auto bf = arc.getBinaryFile("Resource-" + std::to_string(id));
 
-    std::string name = bf.get();
-    uint32_t size;
-    bf.get(&size);
+    // Check if it's linked
+    bool lk;
+    bf.get(&lk);
 
-    if (size == -1)
+    if (lk)
     {
-        // Resource didn't want to be serialized?
-        LOG_WARN("Warning: Resource was not properly serialized");
-        return ResourceRef<Resource>();
+        // It's a resource from another file
+        std::string filename = bf.get();
+        auto real_fname = dir / filename;
+
+        uint32_t ihid;
+        bf.get(&ihid);
+
+        auto ser = deserialize(real_fname);
+        auto res = ser->getResourceByIHID(ihid);
+
+        resource_done[id] = true;
+        resources[id] = res;
+
+        return res;
     }
+    else
+    {
+        std::string name = bf.get();
+        uint32_t size;
+        bf.get(&size);
 
-    // Initialize
-    auto res = Resources::createResource(Resources::resource_factory_map[name]());
-    auto data = new char[size];
-    bf.get(data, size);
-    auto en = FluxArc::BinaryFile(data, size);
-    res->deserialize(this, &en);
+        if (size == -1)
+        {
+            // Resource didn't want to be serialized?
+            LOG_WARN("Warning: Resource was not properly serialized");
+            return ResourceRef<Resource>();
+        }
 
-    resource_done[id] = true;
-    resources[id] = res;
-    return res;
+        // Initialize
+        auto res = Resources::createResource(Resources::resource_factory_map[name]());
+        auto data = new char[size];
+        bf.get(data, size);
+        auto en = FluxArc::BinaryFile(data, size);
+        res->deserialize(this, &en);
+
+        resource_done[id] = true;
+        resources[id] = res;
+
+        // Find ihid
+        // TODO: Maybe do this a more efficient way?
+        uint32_t ihid = 0;
+        for (auto i : ihid_table)
+        {
+            if (i.second == id)
+            {
+                ihid = i.first;
+            }
+        }
+
+        // Add identifier tag
+        SerializeCom* s = new SerializeCom;
+        s->inheritance_id = ihid;
+        s->inherited_file = std::filesystem::absolute(fname);
+        res.getBaseEntity().addComponent(s);
+        return res;
+    }
+}
+
+ResourceRef<Resource> Deserializer::getResourceByIHID(uint32_t ihid)
+{
+    return getResource(ihid_table[ihid]);
 }
 
 std::vector<Flux::EntityRef> Deserializer::addToECS(ECSCtx *ctx)
