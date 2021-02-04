@@ -208,7 +208,7 @@ Deserializer* Flux::Resources::deserialize(const std::string& filename, bool rel
 }
 
 Deserializer::Deserializer(const std::string& filename)
-:arc(filename)
+:arc(filename), total_references(0), created(false)
 {
     dir = std::filesystem::path(filename).parent_path();
     fname = std::filesystem::path(filename);
@@ -277,6 +277,7 @@ Deserializer::Deserializer(const std::string& filename)
     arc = FluxArc::Archive();
     LOG_INFO("Deserialized file " + filename);
 
+    created = true;
 }
 
 Deserializer::~Deserializer()
@@ -299,7 +300,8 @@ void Deserializer::destroyResources()
     {
         if (i.getBaseEntity().getComponent<SerializeCom>()->inherited_file == file)
         {
-            removeResource(i);
+            // Removing a resource basically causes a double free
+            // removeResource(i);
         }
     }
 }
@@ -349,14 +351,11 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
         }
 
         // Initialize
-        auto res = Resources::createResource(Resources::resource_factory_map[name]());
+        auto res = Resources::resource_factory_map[name]();
         auto data = new char[size];
         bf.get(data, size);
         auto en = FluxArc::BinaryFile(data, size);
         res->deserialize(this, &en);
-
-        resource_done[id] = true;
-        resources[id] = res;
 
         // Find ihid
         // TODO: Maybe do this a more efficient way?
@@ -373,8 +372,19 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
         SerializeCom* s = new SerializeCom;
         s->inheritance_id = ihid;
         s->inherited_file = std::filesystem::absolute(fname);
-        res.getBaseEntity().addComponent(s);
-        return res;
+        s->parent_file = this;
+
+        auto real_res = Resources::createResource(res);
+        real_res.getBaseEntity().addComponent(s);
+
+        // Hack to get this to actually work:
+        // TODO: Go this in a less hacky way
+        real_res.from_file = true;
+        addRef();
+
+        resource_done[id] = true;
+        resources[id] = real_res;
+        return real_res;
     }
 }
 
@@ -385,7 +395,7 @@ ResourceRef<Resource> Deserializer::getResourceByIHID(uint32_t ihid)
 
 std::vector<Flux::EntityRef> Deserializer::addToECS(ECSCtx *ctx)
 {
-    entity_done = {};
+    entity_done = std::vector<bool>(entities.size(), false);
     entitys = {};
     
     current_ctx = ctx;
@@ -425,4 +435,36 @@ Flux::EntityRef Deserializer::getEntity(int id)
     entity_done[id] = true;
     
     return entity;
+}
+
+void Deserializer::addRef()
+{
+    total_references ++;
+}
+
+void Deserializer::subRef()
+{
+    total_references --;
+
+    if (!created)
+    {
+        // Don't destroy ourselves because all our resources haven't been loaded yet
+        return;
+    }
+
+    if (total_references <= resources.size())
+    {
+        // The only references to all our resources is us
+        // Which means time to free :(
+        freeFile(fname); // wrong remove!
+    }
+}
+
+void Flux::Resources::freeFile(const std::string &filename)
+{
+    // Resources should be freed automatically
+    delete[] loaded_files[filename];
+
+    // And delete the map entry
+    loaded_files.erase(filename);
 }

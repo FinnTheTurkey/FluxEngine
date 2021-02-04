@@ -189,7 +189,7 @@ namespace Flux { namespace Renderer {
             vert_src = res->vert_src;
             frag_src = res->frag_src;
 
-            Resources::removeResource(res);
+            // Resources::removeResource(res);
         };
     };
 

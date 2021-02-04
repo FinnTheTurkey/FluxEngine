@@ -12,7 +12,7 @@ void Flux::Resources::initialiseResources()
 {
     if (rctx != nullptr)
     {
-        LOG_WARN("Tryied to initialize Resource system twice!");
+        LOG_WARN("Tried to initialize Resource system twice!");
     }
     rctx = new ECSCtx();
 }
