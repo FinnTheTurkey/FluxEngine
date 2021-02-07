@@ -184,31 +184,20 @@ void Serializer::save(FluxArc::Archive& arc, bool release = false)
 
 Deserializer* Flux::Resources::deserialize(const std::string& filename, bool reload)
 {
-    if (!reload)
+    if (loaded_files.find(filename) != loaded_files.end())
     {
-        if (loaded_files.find(filename) != loaded_files.end())
-        {
-            // We have already loaded this file
-            return loaded_files[filename];
-        }
-    }
-    else
-    {
-        if (loaded_files.find(filename) != loaded_files.end())
-        {
-            loaded_files[filename]->destroyResources();
-            delete loaded_files[filename];
-        }
+        // We have already loaded this file
+        return loaded_files[filename];
     }
 
-    auto ds = new Deserializer(filename);
+    auto ds = new Deserializer(filename, reload);
     loaded_files[filename] = ds;
 
     return ds;
 }
 
-Deserializer::Deserializer(const std::string& filename)
-:arc(filename), total_references(0), created(false)
+Deserializer::Deserializer(const std::string& filename, bool unlinked_res)
+:arc(filename), total_references(0), created(false), unlinked(unlinked_res)
 {
     dir = std::filesystem::path(filename).parent_path();
     fname = std::filesystem::path(filename);
@@ -367,24 +356,37 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
                 ihid = i.first;
             }
         }
+        
+        if (!unlinked)
+        {
+            // Add identifier tag
+            SerializeCom* s = new SerializeCom;
+            s->inheritance_id = ihid;
+            s->inherited_file = std::filesystem::absolute(fname);
+            s->parent_file = this;
 
-        // Add identifier tag
-        SerializeCom* s = new SerializeCom;
-        s->inheritance_id = ihid;
-        s->inherited_file = std::filesystem::absolute(fname);
-        s->parent_file = this;
+            auto real_res = Resources::createResource(res);
+            real_res.getBaseEntity().addComponent(s);
 
-        auto real_res = Resources::createResource(res);
-        real_res.getBaseEntity().addComponent(s);
+            // Hack to get this to actually work:
+            // TODO: Go this in a less hacky way
+            real_res.from_file = true;
+            addRef();
 
-        // Hack to get this to actually work:
-        // TODO: Go this in a less hacky way
-        real_res.from_file = true;
-        addRef();
+            resource_done[id] = true;
+            resources[id] = real_res;
+            return real_res;
+        }
+        else
+        {
+            auto real_res = Resources::createResource(res);
+            
+            resource_done[id] = true;
+            resources[id] = real_res;
+            return real_res;
+        }
 
-        resource_done[id] = true;
-        resources[id] = real_res;
-        return real_res;
+        
     }
 }
 
@@ -429,6 +431,12 @@ Flux::EntityRef Deserializer::getEntity(int id)
         // We have to use the old method because we can't use the templated function
         // If we don't know the freaking type!
         current_ctx->_addComponent(entity.getEntityID(), Flux::getComponentType(i.first), new_com);
+    }
+
+    // Initialise scene links
+    if (entity.hasComponent<SceneLinkCom>())
+    {
+        instanciateSceneLink(entity);
     }
 
     entitys[id] = entity;

@@ -129,6 +129,12 @@ namespace Flux { namespace Resources {
         */
         uint32_t addResource(ResourceRef<Resource> res, uint32_t ihid=0);
 
+        std::string getRelativePath(std::string path)
+        {
+            std::filesystem::path p(path);
+            return std::filesystem::relative(path, std::filesystem::path(fname).parent_path());
+        };
+
         /** Saves the Entities and Resources to a file */
         void save(FluxArc::Archive& arc, bool release);
 
@@ -152,7 +158,7 @@ namespace Flux { namespace Resources {
     class Deserializer
     {
     public:
-        Deserializer(const std::string& filename);
+        Deserializer(const std::string& filename, bool unlinked_res);
         ~Deserializer();
 
         /** Add all of the Entities from the file to an ECSCtx. Returns a vector if EntityRefs */
@@ -194,6 +200,8 @@ namespace Flux { namespace Resources {
         std::filesystem::path dir;
         std::filesystem::path fname;
 
+        bool unlinked;
+
         /** Tracks the total references of all this file's resources */
         uint64_t total_references;
 
@@ -201,7 +209,41 @@ namespace Flux { namespace Resources {
         bool created;
     };
 
-    
+    /**
+    Link an entity to another scene, and load that other scene.
+    If the entity has TransformCom, the other scene will be loaded
+    as it's child.
+    */
+    void createSceneLink(EntityRef entity, const std::string& scene);
+
+    /**
+    Instanciate a scene link
+    */
+    void instanciateSceneLink(EntityRef entity);
+
+    /**
+    Component that instanciates another scene.
+    Scenes will only be instanciated at load time, or if instanciateScene is called
+    */
+    struct SceneLinkCom: public Component
+    {
+        FLUX_COMPONENT(SceneLinkCom, SceneLinkCom);
+        std::string filename;
+
+        bool serialize(Resources::Serializer* ser, FluxArc::BinaryFile *output) override
+        {
+            output->set(ser->getRelativePath(filename));
+
+            return true;
+        }
+
+        void deserialize(Resources::Deserializer *deserializer, FluxArc::BinaryFile *file) override
+        {
+            auto fname = file->get();
+            filename = deserializer->getDirectory() / fname;
+        }
+    };
+
     template <typename T>
     class ResourceRef
     {
@@ -472,7 +514,7 @@ namespace Flux { namespace Resources {
     // Other bits of serialization and deserialization
 
     inline std::map<std::string, Deserializer*> loaded_files;
-    Deserializer* deserialize(const std::string& filename, bool reload = false);
+    Deserializer* deserialize(const std::string& filename, bool unlinked_res = false);
 
     /**
     Remove a Deserializer currently in memory. 

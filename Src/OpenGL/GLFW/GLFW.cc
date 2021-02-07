@@ -223,7 +223,7 @@ void Flux::runMainloop()
 
     // Destroy resources before windows so opengl resource cleanup
     // doesn't cause a segfault 'cause the window is gone
-    Flux::Resources::destroyResources();
+    // Flux::Resources::destroyResources();
     Flux::GLRenderer::destroyWindow();
 #endif
 }

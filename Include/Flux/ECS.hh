@@ -4,7 +4,7 @@
 #include "Flux/Log.hh"
 #include "FluxArc/FluxArc.hh"
 #ifndef FLUX_MAX_ENTITIES
-#define FLUX_MAX_ENTITIES 1024
+#define FLUX_MAX_ENTITIES 16384
 #endif
 
 #ifndef FLUX_MAX_COMPONENTS
@@ -309,6 +309,7 @@ namespace Flux
         */
         void runQueuedSystems(float delta);
     };
+    
 
     inline std::map<std::string, ComponentTypeID> component_types;
     inline std::map<std::string, Component*(*)()> component_factory;

@@ -1,6 +1,7 @@
 #include "Flux/Resources.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Log.hh"
+#include "Flux/Renderer.hh"
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -20,6 +21,39 @@ void Flux::Resources::initialiseResources()
 void Flux::Resources::destroyResources()
 {
     rctx->destroyAllEntities();
+}
+
+void Flux::Resources::createSceneLink(EntityRef entity, const std::string& scene)
+{
+    auto slc = new SceneLinkCom;
+    slc->filename = scene;
+    entity.addComponent(slc);
+
+    instanciateSceneLink(entity);
+}
+
+void Flux::Resources::instanciateSceneLink(EntityRef entity)
+{
+    auto fname = entity.getComponent<SceneLinkCom>()->filename;
+    
+    auto scene = deserialize(fname);
+    auto output = scene->addToECS(entity.getCtx());
+
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
+    {
+        // Make it the parent of all unparented entities
+        for (auto i : output)
+        {
+            if (i.hasComponent<Flux::Transform::TransformCom>())
+            {
+                auto tc = i.getComponent<Flux::Transform::TransformCom>();
+                if (tc->has_parent == false)
+                {
+                    Flux::Transform::setParent(i, entity);
+                }
+            }
+        }
+    }
 }
 
 // Flux::Resources::ResourceRef Flux::Resources::createResource(Resource *res)
