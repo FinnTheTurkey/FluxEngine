@@ -266,6 +266,8 @@ int Flux::ECSCtx::addSystem(System* sys, bool threaded)
 
     // id_count ++;
 
+    sys->onSystemAdded(this);
+
     if (!system_reuse.empty())
     {
         // Use recycled ID

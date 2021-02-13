@@ -121,9 +121,18 @@ void Serializer::save(FluxArc::Archive& arc, bool release = false)
 
         // Serialize
         FluxArc::BinaryFile bf, en;
+        bool embed_res = true;
 
         if (resources[j].getBaseEntity().hasComponent<SerializeCom>())
         {
+            // Make sure we don't link to ourselves
+            if (resources[j].getBaseEntity().getComponent<SerializeCom>()->inherited_file != std::filesystem::path(fname))
+            {
+                embed_res = false;
+            }
+        }
+
+        if (!embed_res) {
             // It came from a file, so just link back to that one
             en.set(true);
             auto sc = resources[j].getBaseEntity().getComponent<SerializeCom>();
@@ -318,13 +327,30 @@ ResourceRef<Resource> Deserializer::getResource(uint32_t id)
         uint32_t ihid;
         bf.get(&ihid);
 
-        auto ser = deserialize(real_fname);
-        auto res = ser->getResourceByIHID(ihid);
+        if (real_fname == fname)
+        {
+            // ...how
+            LOG_WARN("File " + fname.string() + " attempts to load a linked resource from itself");
+            auto res = getResourceByIHID(ihid);
 
-        resource_done[id] = true;
-        resources[id] = res;
+            resource_done[id] = true;
+            resources[id] = res;
 
-        return res;
+            return res;
+        }
+        else
+        {
+            auto ser = deserialize(real_fname);
+            auto res = ser->getResourceByIHID(ihid);
+
+            resource_done[id] = true;
+            resources[id] = res;
+
+            return res;
+        }
+        
+
+        
     }
     else
     {

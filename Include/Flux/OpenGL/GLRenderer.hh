@@ -66,8 +66,12 @@ namespace Flux { namespace GLRenderer {
 
         // Special high priority uniform locations
         uint32_t mvp_location;
-
+        uint32_t mv_location;
+        uint32_t m_location;
+        uint32_t cam_pos_location;
         uint32_t has_texture_location;
+
+        uint32_t light_indexes_location;
     };
     
     /** Little struct for storing info on textures */
@@ -166,10 +170,17 @@ namespace Flux { namespace GLRenderer {
     private:
         void initGLMaterial(Flux::Renderer::MeshCom* mesh);
         void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res);
+        void dealWithLights();
+        bool setup_lighting = false;
 
         glm::mat4 projection;
 
+        Renderer::LightSystem* lights;
+        uint32_t light_buffer;
+
     public:
+        GLRendererSystem();
+        void onSystemAdded(ECSCtx* ctx) override;
         void onSystemStart() override;
 
         void runSystem(EntityRef entity, float delta) override;

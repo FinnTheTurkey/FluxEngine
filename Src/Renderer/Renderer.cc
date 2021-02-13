@@ -234,6 +234,217 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
 }
 
 // =========================================================
+// Lighting
+// =========================================================
+
+// EntityRef Flux::Renderer::lights[128];
+// static bool setup = false;
+// std::vector<int> Flux::Renderer::lights_that_changed;
+
+void Renderer::addLight(EntityRef entity, float radius, glm::vec3 color)
+{
+    if (!entity.hasComponent<Transform::TransformCom>())
+    {
+        LOG_WARN("A TransformCom is required to create a light");
+        return;
+    }
+
+    auto lc = new LightCom;
+    lc->color = color;
+    lc->radius = radius;
+    lc->inducted = false;
+    entity.addComponent(lc);
+}
+
+Renderer::LightSystem::LightSystem()
+{
+    // Null all the lights
+    for (int i = 0; i < 128; i++)
+    {
+        lights[i] = EntityRef();
+    }
+
+    return;
+}
+
+void Renderer::LightSystem::onSystemStart()
+{
+    // Check all of our lights to see if they've changed
+    lights_that_changed.clear();
+
+    // Add it to the lighting setup if it hasn't already been
+    for (auto entity : new_lights)
+    {
+        for (int i = 0; i < 128; i++)
+        {
+            if (lights[i].getEntityID() == -1)
+            {
+                lights[i] = entity;
+
+                // Force it to be on the lights_that_changed list
+                entity.getComponent<Transform::TransformCom>()->has_changed = true;
+                break;
+            }
+        }
+
+        entity.getComponent<LightCom>()->inducted = true;
+    }
+
+    new_lights.clear();
+
+    int c = 0;
+    for (auto i : lights)
+    {
+        if (i.getEntityID() != -1)
+        {
+            if (i.getComponent<Transform::TransformCom>()->has_changed)
+            {
+                // Oh well, I guess we're recalculating that light
+                lights_that_changed.push_back(c);
+            }
+        }
+
+        c++;
+    }
+}
+
+// This must run AFTER transform system
+void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
+{
+    if (entity.hasComponent<LightCom>())
+    {
+        auto lc = entity.getComponent<LightCom>();
+        if (!lc->inducted)
+        {
+            new_lights.push_back(entity);
+        }
+    }
+
+    if (!entity.hasComponent<MeshCom>() || !entity.hasComponent<Transform::TransformCom>())
+    {
+        return;
+    }
+
+    auto tc = entity.getComponent<Transform::TransformCom>();
+    glm::vec3 position = glm::vec3(tc->model * glm::vec4(0,0,0,1));
+
+    if (!entity.hasComponent<LightInfoCom>())
+    {
+
+        // Calculate initial lighting
+        int light_count = 0;
+        auto lightinfo = new LightInfoCom;
+        for (int i = 0; i < 128; i++)
+        {
+            if (lights[i].getEntityID() != -1)
+            {
+                auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                if (glm::distance(light_pos, position) <= lights[i].getComponent<LightCom>()->radius)
+                {
+                    lightinfo->effected_lights[light_count] = i;
+                    light_count ++;
+                    if (light_count == 8)
+                    {
+                        // We've reached max lights
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Full up the rest of the light com
+        for (int i = light_count; i < 8; i++)
+        {
+            lightinfo->effected_lights[i] = -1;
+        }
+        
+        entity.addComponent(lightinfo);
+        // No need to recalculate anything else
+        return;
+    }
+
+    auto lightinfo = entity.getComponent<LightInfoCom>();
+
+    if (tc->has_changed == true)
+    {
+        // We have to do a full recalculation, anyways
+        // Calculate initial lighting
+        int light_count = 0;
+        for (int i = 0; i < 128; i++)
+        {
+            if (lights[i].getEntityID() != -1)
+            {
+                auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                if (glm::distance(light_pos, position) <= lights[i].getComponent<LightCom>()->radius)
+                {
+                    lightinfo->effected_lights[light_count] = i;
+                    light_count ++;
+                    if (light_count == 8)
+                    {
+                        // We've reached max lights
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Full up the rest of the light com
+        for (int i = light_count; i < 8; i++)
+        {
+            lightinfo->effected_lights[i] = -1;
+        }
+        
+        // No need to recalculate anything else
+        return;
+    }
+    else
+    {
+        // Check if this entity is effected by any of the moved lights
+        for (auto l : lights_that_changed)
+        {
+            bool is_current = false;
+            for (int i = 0; i < 8; i ++)
+            {
+                if (l == lightinfo->effected_lights[i])
+                {
+                    // Re-calculate that light
+                    auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                    if (glm::distance(light_pos, position) > lights[l].getComponent<LightCom>()->radius)
+                    {
+                        // Remove that light from the list
+                        // Move every light after it forward
+                        for (int li = i; i < 7; i++)
+                        {
+                            lightinfo->effected_lights[li] = lightinfo->effected_lights[li + 1];
+                        }
+                        lightinfo->effected_lights[7] = -1;
+                        is_current = true;
+                    }
+                }
+            }
+
+            if (!is_current)
+            {
+                auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                if (glm::distance(light_pos, position) <= lights[l].getComponent<LightCom>()->radius)
+                {
+                    // Add this light
+                    for (int i = 0; i < 8; i++)
+                    {
+                        if (lightinfo->effected_lights[i] == -1)
+                        {
+                            // Put it here
+                            lightinfo->effected_lights[i] = l;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================
 // Special functions in resources
 // =========================================================
 void Flux::Renderer::TextureRes::loadImage(const std::string& filename)

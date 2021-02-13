@@ -103,6 +103,9 @@ namespace Flux
     class System
     {
     public:
+        /** Called when the system is added to the ECSCtx */
+        virtual void onSystemAdded(ECSCtx* ctx) {};
+
         /** Called right before this system is run.  */
         virtual void onSystemStart() {}
 

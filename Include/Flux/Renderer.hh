@@ -11,6 +11,8 @@
 
 // GLM
 #include <glm/glm.hpp>
+#include <set>
+#include <vector>
 #include "glm/fwd.hpp"
 
 
@@ -597,6 +599,68 @@ namespace Flux { namespace Renderer {
     */
     double getTime();
 
+    /**
+    Component that defines a light
+    */
+    struct LightCom: public Component
+    {
+        FLUX_COMPONENT(LightCom, LightCom);
+
+        float radius;
+        glm::vec3 color;
+
+        bool inducted = false;
+
+        bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
+        {
+            output->set(radius);
+
+            output->set(color.x);
+            output->set(color.y);
+            output->set(color.z);
+
+            return true;
+        }
+
+        void deserialize(Resources::Deserializer *deserializer, FluxArc::BinaryFile *file) override
+        {
+            file->get(&radius);
+
+            file->get(&color.x);
+            file->get(&color.y);
+            file->get(&color.z);
+        }
+    };
+
+    /**
+    Runtime component that tells each object which lights are interacting with it
+    */
+    struct LightInfoCom: public Component
+    {
+        FLUX_COMPONENT(LightInfoCom, LightInfoCom);
+
+        int effected_lights[8];
+    };
+
+    // extern EntityRef lights[128];
+    // extern std::vector<int> lights_that_changed;
+
+    class LightSystem: public System
+    {
+    public:
+        EntityRef lights[128];
+        std::vector<int> lights_that_changed;
+        std::vector<EntityRef> new_lights;
+
+        LightSystem();
+        void onSystemStart() override;
+        void runSystem(EntityRef entity, float delta) override;
+    private:
+    };
+
+    /** Turns the given entity into a light. The entity must have a transformation */
+    void addLight(EntityRef entity, float radius, glm::vec3 color);
+
 }
 
 namespace Transform
@@ -609,11 +673,14 @@ namespace Transform
         FLUX_COMPONENT(TransformCom, transform);
         glm::mat4 transformation;
         glm::mat4 model_view;
+        glm::mat4 model;
 
         bool has_parent;
         EntityRef parent;
 
         bool visible;
+
+        bool has_changed = true;
 
         bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
         {
@@ -677,6 +744,7 @@ namespace Transform
 
             // Model view
             model_view = glm::mat4();
+            model = glm::mat4();
 
             // Parent
             output->get(&has_parent);
@@ -767,6 +835,8 @@ namespace Transform
     /** Get the global transformation matrix for an entity */
     glm::mat4 getParentTransform(EntityRef entity);
 
+    glm::mat4 _getParentTransform(EntityRef entity, bool* has_changed);
+
     void setVisible(EntityRef entity, bool vis);
 
     /**
@@ -834,6 +904,9 @@ namespace Transform
     {
         void runSystem(EntityRef entity, float delta) override;
     };
+
+    /** Helper variable for the renderer that says the global position of the camera */
+    extern glm::vec3 camera_position;
 
     class CameraSystem: public System
     {

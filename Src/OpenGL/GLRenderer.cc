@@ -91,6 +91,70 @@ void processTexture(Flux::Resources::ResourceRef<Flux::Renderer::TextureRes> tex
     }
 }
 
+GLRendererSystem::GLRendererSystem():
+lights(new Renderer::LightSystem)
+{
+    
+}
+
+void GLRendererSystem::onSystemAdded(ECSCtx *ctx)
+{
+    ctx->addSystemFront(lights);
+}
+
+void GLRendererSystem::dealWithLights()
+{
+    if (!setup_lighting)
+    {
+        // Create initial light data
+        glGenBuffers(1, &light_buffer);
+
+        // This is all in layout std140
+        // Which means:
+        //  - Vec3s and Vec4s are _both_ 4 floats long
+        //  - Arrays are mostly normal, except all arrays must be a multiple
+        //    of the size of a vec4
+        constexpr int vec4_size = sizeof(float) * 4;
+        // 128 floats is already a multiple of vec4_size, so we don't need to worry about that
+        // constexpr int total_size = (128 * vec4_size * 2) + (128 * sizeof(float));
+        constexpr int total_size = (128 * vec4_size * 4); // + (128 * sizeof(float));
+
+        glBindBuffer(GL_UNIFORM_BUFFER, light_buffer);
+        glBufferData(GL_UNIFORM_BUFFER, total_size, NULL, GL_DYNAMIC_DRAW);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 1, light_buffer, 0, total_size);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        // Fill with zeros for now
+        // Buffer of zeros:
+        float zeros[896];
+        for (int i = 0; i < 896; i++)
+        {
+            zeros[i] = 0;
+        }
+
+        glBindBuffer(GL_UNIFORM_BUFFER, light_buffer);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(zeros), &zeros);
+        setup_lighting = true;
+    }
+
+    // Add all the changed lights to the buffer
+    glBindBuffer(GL_UNIFORM_BUFFER, light_buffer);
+    for (auto i : lights->lights_that_changed)
+    {
+        auto light = lights->lights[i];
+        auto tc = light.getComponent<Transform::TransformCom>();
+        auto pos = glm::vec3(tc->model * glm::vec4(0,0,0,1));
+
+        auto lc = light.getComponent<Renderer::LightCom>();
+
+        // Add to buffer
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * i, sizeof(glm::vec3), &pos);
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 + (sizeof(glm::vec4) * i), sizeof(glm::vec3), &lc->color);
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 * 2 + (sizeof(glm::vec4) * i), sizeof(float), &lc->radius);
+    }
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
 void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res)
 {
     bool create = false;
@@ -108,6 +172,7 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         {
             uni = new GLUniformCom;
 
+            // How does this even work??
             uni->block_size = glGetUniformBlockIndex(shader_res->shader_program, "Material");
             glUniformBlockBinding(shader_res->shader_program, uni->block_size, 0);
             mesh->mat_resource.getBaseEntity().addComponent(uni);
@@ -280,7 +345,6 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         // glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
         glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
     }
-
 }
 
 void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
@@ -354,11 +418,23 @@ void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
             std::cout << "Shader linking failed:\n" << infoLog3 << std::endl;
         }
 
-        shader_com->mvp_location = glGetUniformLocation(shader_com->shader_program, "model_view");
+        shader_com->mvp_location = glGetUniformLocation(shader_com->shader_program, "model_view_projection");
+        shader_com->mv_location = glGetUniformLocation(shader_com->shader_program, "model_view");
+        shader_com->m_location = glGetUniformLocation(shader_com->shader_program, "model");
+        shader_com->cam_pos_location = glGetUniformLocation(shader_com->shader_program, "cam_pos");
+        shader_com->light_indexes_location = glGetUniformLocation(shader_com->shader_program, "light_indexes");
 
         // Cleanup
         glDeleteShader(vertex_shader);
         glDeleteShader(fragment_shader);
+
+        // Link lights
+        // It should stay linked, since I'm not re-binding that binding point
+        auto bs = glGetUniformBlockIndex(shader_com->shader_program, "Lights");
+        if (bs != GL_INVALID_INDEX)
+        {
+            glUniformBlockBinding(shader_com->shader_program, bs, 1);
+        }
 
         // Add to resource entity
         // Flux::addComponent(Flux::Resources::rctx, mat_res->shaders, GLShaderComponentID, shader_com);
@@ -382,6 +458,9 @@ void GLRendererSystem::onSystemStart()
 {
     // TODO: Customisable FOV
     projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
+
+    // Make sure the lights are in the correct positions
+    dealWithLights();
     
 }
 
@@ -489,13 +568,27 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
     // int loc = glGetUniformLocation(shader_com->shader_program, "model_view");
     auto mvp = projection * trans_com->model_view;
     glUniformMatrix4fv(shader_com->mvp_location, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniformMatrix4fv(shader_com->mv_location, 1, GL_FALSE, glm::value_ptr(trans_com->model_view));
+    glUniformMatrix4fv(shader_com->m_location, 1, GL_FALSE, glm::value_ptr(trans_com->model));
+    glUniform3f(shader_com->cam_pos_location, Transform::camera_position.x,
+                                                Transform::camera_position.y,
+                                                Transform::camera_position.z);
 
     dealWithUniforms(mesh, mat_res, shader_com);
+
+    // Deal with lights
+    if (entity.hasComponent<Renderer::LightInfoCom>())
+    {
+        auto lic = entity.getComponent<Renderer::LightInfoCom>();
+        glUniform1iv(shader_com->light_indexes_location, 8, lic->effected_lights);
+    }
 
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(mesh_com->VAO);
     glDrawElements(mesh_com->draw_type, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+
+    trans_com->has_changed = false;
 
 }
 
