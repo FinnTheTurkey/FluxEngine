@@ -39,6 +39,14 @@ namespace Flux { namespace Renderer {
 
         float tx;
         float ty;
+
+        float tanx;
+        float tany;
+        float tanz;
+
+        float btanx;
+        float btany;
+        float btanz;
     };
 
     enum DrawMode
@@ -81,7 +89,7 @@ namespace Flux { namespace Renderer {
             output->set(vertices_length);
 
             // Resize the binary file to limit copies
-            output->allocate(sizeof(float) * 8 * vertices_length);
+            output->allocate(sizeof(float) * 14 * vertices_length);
             for (int i = 0; i < vertices_length; i++)
             {
                 output->set(vertices[i].x);
@@ -94,6 +102,14 @@ namespace Flux { namespace Renderer {
 
                 output->set(vertices[i].tx);
                 output->set(vertices[i].ty);
+
+                output->set(vertices[i].tanx);
+                output->set(vertices[i].tany);
+                output->set(vertices[i].tanz);
+
+                output->set(vertices[i].btanx);
+                output->set(vertices[i].btany);
+                output->set(vertices[i].btanz);
             }
 
             output->set(indices_length);
@@ -125,6 +141,14 @@ namespace Flux { namespace Renderer {
 
                 file->get(&vertices[i].tx);
                 file->get(&vertices[i].ty);
+
+                file->get(&vertices[i].tanx);
+                file->get(&vertices[i].tany);
+                file->get(&vertices[i].tanz);
+
+                file->get(&vertices[i].btanx);
+                file->get(&vertices[i].btany);
+                file->get(&vertices[i].btanz);
             }
 
             file->get(&indices_length);
@@ -216,8 +240,22 @@ namespace Flux { namespace Renderer {
 
         bool serialize(Resources::Serializer* serializer, FluxArc::BinaryFile* output) override
         {
-            if (processed && internal)
+            if (processed && internal && image_data == nullptr)
             {
+                if (width == 1 && height == 1)
+                {
+                    // It's a dummy texture
+                    output->set(internal);
+                    output->set(image_data_size);
+                    unsigned char x[4] { 1, 0, 0, 1};
+                    output->set((char*)x, image_data_size);
+
+                    output->set(width);
+                    output->set(height);
+                    return true;
+                }
+
+                // TODO: Don't free textures in editor
                 LOG_WARN("Texture has already been procesed, and data has been freed. Image will not be serialized");
                 return false;
             }
@@ -629,6 +667,8 @@ namespace Flux { namespace Renderer {
             file->get(&color.x);
             file->get(&color.y);
             file->get(&color.z);
+
+            inducted = false;
         }
     };
 

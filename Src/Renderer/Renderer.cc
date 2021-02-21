@@ -316,6 +316,7 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
         auto lc = entity.getComponent<LightCom>();
         if (!lc->inducted)
         {
+            LOG_INFO("Adding new light");
             new_lights.push_back(entity);
         }
     }
@@ -469,10 +470,15 @@ void Flux::Renderer::TextureRes::destroy()
     {
         if (internal)
         {
+#ifndef FLUX_NO_CPU_FREE
             delete[] image_data;
+            image_data = nullptr;
+#endif
         }
         else
         {
+            // Since it's not only stored in the archive, I can still do this
+            // Even when FLUX_NO_CPU_FREE is on
             stbi_image_free(image_data);
         }
 

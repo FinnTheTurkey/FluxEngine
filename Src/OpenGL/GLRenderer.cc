@@ -9,6 +9,7 @@
 // #include <bits/stdint-uintn.h>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <map>
 #include <string>
 #include <sstream>
@@ -82,6 +83,7 @@ void processTexture(Flux::Resources::ResourceRef<Flux::Renderer::TextureRes> tex
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->width, texture->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture->image_data);
+        LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Texture "+ texture->filename + " failed");
         glGenerateMipmap(GL_TEXTURE_2D);
 
         // Free the texture
@@ -126,15 +128,22 @@ void GLRendererSystem::dealWithLights()
 
         // Fill with zeros for now
         // Buffer of zeros:
-        float zeros[896];
-        for (int i = 0; i < 896; i++)
+        char zeros[total_size];
+        for (int i = 0; i < total_size; i++)
         {
             zeros[i] = 0;
         }
 
         glBindBuffer(GL_UNIFORM_BUFFER, light_buffer);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(zeros), &zeros);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
         setup_lighting = true;
+
+        const GLenum err = glGetError();
+        if (GL_NO_ERROR != err)
+        {
+            LOG_ERROR("OpenGL Error");
+        }
     }
 
     // Add all the changed lights to the buffer
@@ -153,6 +162,12 @@ void GLRendererSystem::dealWithLights()
         glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 * 2 + (sizeof(glm::vec4) * i), sizeof(float), &lc->radius);
     }
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    const GLenum err = glGetError();
+    if (GL_NO_ERROR != err)
+    {
+        LOG_ERROR("OpenGL Error");
+    }
 }
 
 void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res)
@@ -172,38 +187,126 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         {
             uni = new GLUniformCom;
 
-            // How does this even work??
             uni->block_size = glGetUniformBlockIndex(shader_res->shader_program, "Material");
             glUniformBlockBinding(shader_res->shader_program, uni->block_size, 0);
             mesh->mat_resource.getBaseEntity().addComponent(uni);
 
+            int block_size;
+            glGetActiveUniformBlockiv(shader_res->shader_program, uni->block_size, GL_UNIFORM_BLOCK_DATA_SIZE, &block_size);
+            std::cout << "Block size: " << block_size << "\n";
+
             // Put data in buffer
             glGenBuffers(1, &uni->handle);
+            glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
 
-            // Calculate size of uniform buffer
-            int total_size = 0;
-            for (auto item: mat_res->uniforms)
+            int size = mat_res->uniforms.size();
+            
+            std::vector<const char*> uniformNames;
+
+            // uniform_names_nice.resize(mat_res->uniforms.size());
+            int count = 0;
+            Renderer::UniformType last_type;
+            for (auto item : mat_res->uniforms)
             {
-                switch (item.second.type)
+                // TODO: "Material." + name
+                if (item.second.type != Renderer::UniformType::Texture)
                 {
-                    case (Flux::Renderer::UniformType::Int): total_size += sizeof(int); break;
-                    case (Flux::Renderer::UniformType::Float): total_size += sizeof(float); break;
-                    case (Flux::Renderer::UniformType::Bool): total_size += sizeof(bool); break;
-                    case (Flux::Renderer::UniformType::Vector2): total_size += sizeof(glm::vec2); break;
-                    case (Flux::Renderer::UniformType::Vector3): total_size += sizeof(glm::vec3); break;
-                    case (Flux::Renderer::UniformType::Vector4): total_size += sizeof(glm::vec4); break;
-                    case (Flux::Renderer::UniformType::Mat4): total_size += sizeof(glm::mat4); break;
-                    case (Flux::Renderer::UniformType::Texture): break;
+                    char* x = new char[item.first.length()];
+                    auto length = item.first.copy(x, item.first.length(), 0);
+                    x[length] = '\0';
+                    uniformNames.push_back(x);
+                    last_type = item.second.type;
                 }
+                else
+                {
+                    // Make the size smaller so we don't tell OpenGL we're sending uniforms that don't exist
+                    size--;
+                }
+
+                count++;
             }
 
-            // auto mc = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
+            // Just a safety check
+            size = uniformNames.size();
+
+            // For MSVC
+            const int array_size = size;
+
+            GLuint uniformIndex[array_size];
+            glGetUniformIndices(shader_res->shader_program, size, &uniformNames[0], uniformIndex);
+            LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "GL_INVALID_OPERATION");
+
+            GLint offsets[array_size];
+            glGetActiveUniformsiv(shader_res->shader_program, size, uniformIndex, GL_UNIFORM_OFFSET, offsets);
+            LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, " uniformCount is greater than or equal to the value of GL_ACTIVE_UNIFORMS for program.");
+
+            int uniform_count;
+            glGetProgramiv(shader_res->shader_program, GL_ACTIVE_UNIFORM_BLOCKS, &uniform_count);
+            std::cout << "Uniform Count: " << uniform_count << "\n";
+
+            int total_size;
+
+            switch(last_type) {
+                case (Flux::Renderer::UniformType::Int):
+                    total_size = sizeof(int);
+                    break;
+                case (Flux::Renderer::UniformType::Float):
+                    total_size = sizeof(float);
+                    break;
+                case (Flux::Renderer::UniformType::Bool):
+                    total_size = sizeof(int);
+                    break;
+                case (Flux::Renderer::UniformType::Vector2):
+                    total_size = sizeof(float) * 2;
+                    break;
+                case (Flux::Renderer::UniformType::Vector3):
+                    total_size = sizeof(glm::vec3);
+                    break;
+                // case (Flux::Renderer::UniformType::Vector3): total_size += sizeof(float) * 4; break;
+                case (Flux::Renderer::UniformType::Vector4):
+                    total_size = sizeof(float) * 4;
+                    break;
+                case (Flux::Renderer::UniformType::Mat4):
+                    total_size = sizeof(glm::mat4);
+                    break;
+                case (Flux::Renderer::UniformType::Texture): break;
+            }
 
             // glBindVertexArray(mc->VAO);
             glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
-            glBufferData(GL_UNIFORM_BUFFER, total_size, NULL, GL_DYNAMIC_DRAW);
+            glBufferData(GL_UNIFORM_BUFFER, block_size, NULL, GL_DYNAMIC_DRAW);
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, uni->handle);
             // glBindVertexArray(0);
+
+            // Add offsets to vector
+            uni->offset.resize(size);
+            for (int i = 0; i < size; i++)
+            {
+                uni->offset[i] = offsets[i];
+            }
+
+            const GLenum err = glGetError();
+            if (GL_NO_ERROR != err)
+            {
+                // LOG_ERROR("OpenGL Error");
+                switch (err)
+                {
+                case GL_NO_ERROR:          LOG_ERROR("No error");
+                case GL_INVALID_ENUM:      LOG_ERROR("Invalid enum");
+                case GL_INVALID_VALUE:     LOG_ERROR("Invalid value");
+                case GL_INVALID_OPERATION: LOG_ERROR("Invalid operation");
+                // case GL_STACK_OVERFLOW:    return "Stack overflow";
+                // case GL_STACK_UNDERFLOW:   return "Stack underflow";
+                case GL_OUT_OF_MEMORY:     LOG_ERROR("Out of memory");
+                default:                   LOG_ERROR("Unknown error");
+                }
+            }
+
+            // Deallocate memory
+            for (auto i : uniformNames)
+            {
+                delete[] i;
+            }
 
         }
         else
@@ -221,29 +324,33 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
         int index = 0;
         int tex_id = 0;
         uni->textures = std::vector<GLTextureStore>();
+        int count = 0;
         for (auto item: mat_res->uniforms)
         {
             switch (item.second.type)
             {
                 case (Flux::Renderer::UniformType::Int):
                 {
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(int), item.second.value);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(int), item.second.value);
                     index += sizeof(int);
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     // memcpy(block_buffer + uni->offset[index], item.second.value, sizeof(int));
                     break;
                 }
                 case (Flux::Renderer::UniformType::Float):
                 {
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float), item.second.value);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float), item.second.value);
                     index += sizeof(float);
+                    LOG_ASSERT_MESSAGE_FATAL(glGetError() == GL_INVALID_VALUE, "Something broke");
                     // memcpy(block_buffer + uni->offset[index], item.second.value, sizeof(float));
                     break;
                 }
                 case (Flux::Renderer::UniformType::Bool):
                 {
                     int res = ((bool*)item.second.value ? 1: 0);
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float), &res);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(int), &res);
                     index += sizeof(int);
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     // memcpy(block_buffer + uni->offset[index], &res, sizeof(int));
                     break;
                 }
@@ -251,38 +358,43 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
                 {
                     // I'm hoping glm's vectors are just a struct of floats...
                     // memcpy(block_buffer + uni->offset[index], item.second.value, sizeof(float) * 2);
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float) * 2, item.second.value);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float) * 2, glm::value_ptr(*(glm::vec2*)item.second.value));
                     index += sizeof(float)*2;
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     break;
                 }
                 case (Flux::Renderer::UniformType::Vector3):
                 {
                     // I'm hoping glm's vectors are just a struct of floats...
                     // memcpy(block_buffer + uni->offset[index], item.second.value, sizeof(float) * 3);
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float) * 3, item.second.value);
-                    index += sizeof(float)*3;
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float) * 3, glm::value_ptr(*(glm::vec3*)item.second.value));
+                    index += sizeof(float)*4;
+                    // index += sizeof(float)*3;
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     break;
                 }
                 case (Flux::Renderer::UniformType::Vector4):
                 {
                     // I'm hoping glm's vectors are just a struct of floats...
                     // memcpy(block_buffer + uni->offset[index], item.second.value, sizeof(float) * 4);
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float) * 4, item.second.value);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float) * 4, glm::value_ptr(*(glm::vec4*)item.second.value));
                     index += sizeof(float)*4;
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     break;
                 }
                 case (Flux::Renderer::UniformType::Mat4):
                 {
                     // memcpy(block_buffer + uni->offset[index], glm::value_ptr(*(glm::mat4*)item.second.value), sizeof(float) * 16);
-                    glBufferSubData(GL_UNIFORM_BUFFER, index, sizeof(float) * 16, item.second.value);
+                    glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float) * 16, item.second.value);
                     index += sizeof(float)*16;
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
                     break;
                 }
                 case (Flux::Renderer::UniformType::Texture):
                 {
                     // For some very stupid reason, textures can't be in uniform buffers
                     auto res = (Resources::ResourceRef<Renderer::TextureRes>*)item.second.value;
-                    
+
                     if (!res->getBaseEntity().hasComponent<GLTextureCom>())
                     {
                         processTexture(Resources::ResourceRef<Renderer::TextureRes>(res->getBaseEntity()));
@@ -291,14 +403,33 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Res
                     // memcpy(block_buffer + uni->offset[index], &tex_id, sizeof(int32_t));
                     tex_id ++;
                     uni->textures.push_back(GLTextureStore {glGetUniformLocation(shader_res->shader_program, item.first.c_str()), res->getBaseEntity()});
+                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_OPERATION, "Could not get texture's uniform location");
 
                     break;
                 }
             }
-            // index ++;
+            count ++;
         }
 
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        std::cout << uni->textures.size() << "\n";
+
+        const GLenum err = glGetError();
+        if (GL_NO_ERROR != err)
+        {
+            switch (err)
+            {
+            case GL_NO_ERROR:          LOG_ERROR("No error"); break;
+            case GL_INVALID_ENUM:      LOG_ERROR("Invalid enum"); break;
+            case GL_INVALID_VALUE:     LOG_ERROR("Invalid value"); break;
+            case GL_INVALID_OPERATION: LOG_ERROR("Invalid operation"); break;
+            // case GL_STACK_OVERFLOW:    return "Stack overflow";
+            // case GL_STACK_UNDERFLOW:   return "Stack underflow";
+            case GL_OUT_OF_MEMORY:     LOG_ERROR("Out of memory"); break;
+            default:                   LOG_ERROR("Unknown error"); break;
+            }
+        }
         // glBufferData(GL_UNIFORM_BUFFER, uni->block_size, block_buffer, GL_DYNAMIC_DRAW);
         // glBindBufferBase(GL_UNIFORM_BUFFER, 0, uni->handle);
 
@@ -515,16 +646,24 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * mesh_res->indices_length, mesh_res->indices, GL_STATIC_DRAW);
 
             // Tell OpenGL what our data means
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 14, (void*)0);
             glEnableVertexAttribArray(0);
 
             // Normal
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)(sizeof(float) * 3));
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 14, (void*)(sizeof(float) * 3));
             glEnableVertexAttribArray(1);
 
             // Texture
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)(sizeof(float) * 6));
+            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 14, (void*)(sizeof(float) * 6));
             glEnableVertexAttribArray(2);
+
+            // Tangents
+            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 14, (void*)(sizeof(float) * 8));
+            glEnableVertexAttribArray(3);
+
+            // Bitangents
+            glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 14, (void*)(sizeof(float) * 11));
+            glEnableVertexAttribArray(4);
 
             mesh_com->num_vertices = mesh_res->vertices_length;
             mesh_com->num_indices = mesh_res->indices_length;

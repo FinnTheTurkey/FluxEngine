@@ -26,6 +26,12 @@ if (CMAKE_BUILD_TYPE MATCHES "Release")
     endif()
 endif()
 
+option(FLUX_NO_CPU_FREE "If enabled, Flux Engine won't free vertex data and textures on the cpu once it's been sent to the gpu" OFF)
+
+if (FLUX_NO_CPU_FREE)
+    add_compile_definitions(FLUX_NO_CPU_FREE)
+endif()
+
 add_compile_definitions(FLUX_NO_THREADING)
 
 # Make sure GLM always creates matricies with values that actually work
@@ -54,35 +60,35 @@ if (FLUX_BUILD_GLFW)
 endif()
 
 add_library(FluxEngine STATIC
-# Headers
-# ===================
-Include/Flux/Flux.hh
-Include/Flux/ECS.hh
-Include/Flux/Log.hh
-# Include/Flux/Threads.hh
-Include/Flux/Resources.hh
-Include/Flux/Input.hh
+    # Headers
+    # ===================
+    Include/Flux/Flux.hh
+    Include/Flux/ECS.hh
+    Include/Flux/Log.hh
+    # Include/Flux/Threads.hh
+    Include/Flux/Resources.hh
+    Include/Flux/Input.hh
 
-# Renderer headers
-Include/Flux/Renderer.hh
-Include/Flux/OpenGL/GLRenderer.hh
+    # Renderer headers
+    Include/Flux/Renderer.hh
+    Include/Flux/OpenGL/GLRenderer.hh
 
-# Source files
-# ===================
-Src/ECS.cc 
-Src/Entry.cc
-Src/Threads.cc
-Src/DevTools/Log.cc
-Src/Res/Resources.cc
-Src/Res/Serialize.cc
+    # Source files
+    # ===================
+    Src/ECS.cc 
+    Src/Entry.cc
+    Src/Threads.cc
+    Src/DevTools/Log.cc
+    Src/Res/Resources.cc
+    Src/Res/Serialize.cc
 
-# Renderer source files
-Src/Renderer/Renderer.cc
-Src/Renderer/Transform.cc
-Src/OpenGL/GLRenderer.cc
+    # Renderer source files
+    Src/Renderer/Renderer.cc
+    Src/Renderer/Transform.cc
+    Src/OpenGL/GLRenderer.cc
 
-# Source files for GLFW window
-${GLFW_SOURCE}
+    # Source files for GLFW window
+    ${GLFW_SOURCE}
 )
 
 target_include_directories(FluxEngine PUBLIC Include)
