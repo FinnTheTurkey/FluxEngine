@@ -637,6 +637,11 @@ namespace Flux { namespace Renderer {
     */
     double getTime();
 
+    enum LightType
+    {
+        Point = 0, Directional = 1, Spot = 2
+    };
+
     /**
     Component that defines a light
     */
@@ -644,29 +649,47 @@ namespace Flux { namespace Renderer {
     {
         FLUX_COMPONENT(LightCom, LightCom);
 
+        LightType type;
         float radius;
+
+        /* In Radians */
+        float cutoff;
+
         glm::vec3 color;
+        glm::vec3 direction;
 
         bool inducted = false;
 
         bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
         {
+            output->set(type);
             output->set(radius);
+            output->set(cutoff);
 
             output->set(color.x);
             output->set(color.y);
             output->set(color.z);
+
+            output->set(direction.x);
+            output->set(direction.y);
+            output->set(direction.z);
 
             return true;
         }
 
         void deserialize(Resources::Deserializer *deserializer, FluxArc::BinaryFile *file) override
         {
+            file->get(&type);
             file->get(&radius);
+            file->get(&cutoff);
 
             file->get(&color.x);
             file->get(&color.y);
             file->get(&color.z);
+
+            file->get(&direction.x);
+            file->get(&direction.y);
+            file->get(&direction.z);
 
             inducted = false;
         }
@@ -698,8 +721,14 @@ namespace Flux { namespace Renderer {
     private:
     };
 
-    /** Turns the given entity into a light. The entity must have a transformation */
-    void addLight(EntityRef entity, float radius, glm::vec3 color);
+    /** Turns the given entity into a point light. The entity must have a transformation */
+    void addPointLight(EntityRef entity, float radius, const glm::vec3& color);
+
+    /** Turns the given entity into a directional light. The entity must have a transformation */
+    void addDirectionalLight(EntityRef entity, const glm::vec3& direction, float radius, glm::vec3 color);
+
+    /** Turns the given entity into a spot light. The entity must have a transformation */
+    void addSpotLight(EntityRef entity, float cutoff_radians, float radius, glm::vec3 color);
 
 }
 

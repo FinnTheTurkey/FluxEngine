@@ -156,10 +156,18 @@ void GLRendererSystem::dealWithLights()
 
         auto lc = light.getComponent<Renderer::LightCom>();
 
+        if (lc->type == Renderer::LightType::Spot)
+        {
+            // Calculate direction from transform
+            lc->direction = -glm::vec3(tc->model * glm::vec4(0, 0, 1, 0));
+        }
+
         // Add to buffer
         glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * i, sizeof(glm::vec3), &pos);
-        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 + (sizeof(glm::vec4) * i), sizeof(glm::vec3), &lc->color);
-        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 * 2 + (sizeof(glm::vec4) * i), sizeof(float), &lc->radius);
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 + (sizeof(glm::vec4) * i), sizeof(glm::vec3), &lc->direction);
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 * 2 + (sizeof(glm::vec4) * i), sizeof(glm::vec3), &lc->color);
+        auto infos = glm::vec3((float)lc->type, lc->radius, glm::cos(lc->cutoff));
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 128 * 3 + (sizeof(glm::vec4) * i), sizeof(glm::vec3), &infos);
     }
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 

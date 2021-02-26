@@ -241,7 +241,7 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
 // static bool setup = false;
 // std::vector<int> Flux::Renderer::lights_that_changed;
 
-void Renderer::addLight(EntityRef entity, float radius, glm::vec3 color)
+void Renderer::addPointLight(EntityRef entity, float radius, const glm::vec3& color)
 {
     if (!entity.hasComponent<Transform::TransformCom>())
     {
@@ -250,8 +250,47 @@ void Renderer::addLight(EntityRef entity, float radius, glm::vec3 color)
     }
 
     auto lc = new LightCom;
+    lc->type = LightType::Point;
     lc->color = color;
     lc->radius = radius;
+    lc->cutoff = 0;
+    lc->direction = glm::vec3(0);
+    lc->inducted = false;
+    entity.addComponent(lc);
+}
+
+void Renderer::addDirectionalLight(EntityRef entity, const glm::vec3& direction, float radius, glm::vec3 color)
+{
+    if (!entity.hasComponent<Transform::TransformCom>())
+    {
+        LOG_WARN("A TransformCom is required to create a light");
+        return;
+    }
+
+    auto lc = new LightCom;
+    lc->type = LightType::Directional;
+    lc->color = color;
+    lc->radius = radius;
+    lc->cutoff = 0;
+    lc->direction = direction;
+    lc->inducted = false;
+    entity.addComponent(lc);
+}
+
+void Renderer::addSpotLight(EntityRef entity, float cutoff_radians, float radius, glm::vec3 color)
+{
+    if (!entity.hasComponent<Transform::TransformCom>())
+    {
+        LOG_WARN("A TransformCom is required to create a light");
+        return;
+    }
+
+    auto lc = new LightCom;
+    lc->type = LightType::Spot;
+    lc->color = color;
+    lc->radius = radius;
+    lc->cutoff = cutoff_radians;
+    lc->direction = glm::vec3(0, 0, 0);
     lc->inducted = false;
     entity.addComponent(lc);
 }
@@ -301,6 +340,7 @@ void Renderer::LightSystem::onSystemStart()
             {
                 // Oh well, I guess we're recalculating that light
                 lights_that_changed.push_back(c);
+                // LOG_INFO("Light changed!");
             }
         }
 
@@ -353,7 +393,7 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
             }
         }
 
-        // Full up the rest of the light com
+        // Fill up the rest of the light com
         for (int i = light_count; i < 8; i++)
         {
             lightinfo->effected_lights[i] = -1;
@@ -376,7 +416,14 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
             if (lights[i].getEntityID() != -1)
             {
                 auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
-                if (glm::distance(light_pos, position) <= lights[i].getComponent<LightCom>()->radius)
+                auto lc = lights[i].getComponent<LightCom>();
+                if (lc == nullptr)
+                {
+                    LOG_WARN("How the hell did a non-light get into the lights array???");
+                    continue;
+                }
+                
+                if (glm::distance(light_pos, position) <= lc->radius)
                 {
                     lightinfo->effected_lights[light_count] = i;
                     light_count ++;
