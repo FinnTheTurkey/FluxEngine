@@ -356,6 +356,13 @@ namespace Flux { namespace Resources {
                     }
 
                     // Copy data
+                    if (that.entity.getEntityID() == -1)
+                    {
+                        // Make myself null entity
+                        this->entity = EntityRef();
+                        from_file = false;
+                        return *this;
+                    }
                     this->entity = that.entity;
                     from_file = that.from_file;
                     entity.getComponent<ResourceCountCom>()->references ++;

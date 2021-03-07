@@ -154,6 +154,12 @@ bool Flux::ECSCtx::destroyEntity(EntityRef entity)
 
     auto en = getEntity(entity);
 
+    if (en == nullptr)
+    {
+        LOG_WARN("Warning: Attempting to remove inexistant entity");
+        return false;
+    }
+
     // Remove components
     for (int i = 0; i < FLUX_MAX_COMPONENTS; i++)
     {

@@ -141,7 +141,12 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
 
     // Disable V-Sync
     // TODO: Make this an option
-    glfwSwapInterval(0); // 1 for v-sync
+    // glfwSwapInterval(0); // 1 for v-sync
+    glfwSwapInterval(1);
+
+#ifdef EMSCRIPTEN
+    glfwSwapInterval(1);
+#endif
 }
 
 static glm::vec2 old_position = glm::vec2(0);
@@ -269,7 +274,9 @@ void showFPS(GLFWwindow* window)
 
 void Flux::GLRenderer::_windowEndFrame()
 {
+#ifndef EMSCRIPTEN
     showFPS(w->window);
+#endif
     glfwSwapBuffers(w->window);
 }
 

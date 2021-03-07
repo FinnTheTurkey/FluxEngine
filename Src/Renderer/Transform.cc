@@ -73,6 +73,11 @@ glm::mat4 Transform::_getParentTransform(EntityRef entity, bool* has_changed)
         
         if (tc->has_parent)
         {
+            if (tc->parent.getEntityID() == -1)
+            {
+                // ...?
+                return tc->transformation;
+            }
             auto output = _getParentTransform(tc->parent, has_changed) * tc->transformation;
             if (*has_changed != tc->has_changed)
             {

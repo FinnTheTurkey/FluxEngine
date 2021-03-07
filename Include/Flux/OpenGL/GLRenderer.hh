@@ -50,7 +50,7 @@ namespace Flux { namespace GLRenderer {
         uint32_t num_vertices;
         uint32_t num_indices;
 
-        uint draw_type;
+        uint32_t draw_type;
     };
 
     /**
