@@ -962,7 +962,43 @@ namespace Transform
     */
     void setTranslation(EntityRef entity, const glm::vec3& translation);
 
-    // TODO: Setters for translation and scale
+    /**
+    Set the current translation in global space
+    */
+    void setGlobalTranslation(EntityRef entity, const glm::vec3& translation);
+
+    /**
+    Get the current rotation relative to its parent
+    */
+    glm::vec3 getRotation(EntityRef entity);
+
+    /**
+    Get the current rotation in global space
+    */
+    glm::vec3 getGlobalRotation(EntityRef entity);
+
+    /**
+    Sets the current rotation relative to its parent
+    */
+    void setRotation(EntityRef entity, const glm::vec3& rotation);
+
+    /**
+    Sets the current rotation in global space
+    */
+    void setGlobalRotation(EntityRef entity, const glm::vec3& rotation);
+
+    /**
+    Get the current scale relative to its parent
+    */
+    glm::vec3 getScale(EntityRef entity);
+
+    /**
+    Set the current scale relative to its parent
+    */
+    void setScale(EntityRef entity, const glm::vec3& scale);
+
+    // Systems Transformations
+    // ========================================
 
     /**
     Add the camera and transformation systems to the given ECS

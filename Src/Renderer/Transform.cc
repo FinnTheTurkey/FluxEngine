@@ -6,6 +6,8 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/matrix.hpp"
 #include "glm/glm.hpp"
+#include "glm/gtx/euler_angles.hpp"
+#include <glm/gtx/matrix_decompose.hpp>
 
 #include <cstdio>
 #include <string>
@@ -231,6 +233,146 @@ glm::vec3 Flux::Transform::getGlobalTranslation(EntityRef entity)
     auto trans = getParentTransform(entity);
     auto o = glm::vec3(trans[3][0], trans[3][1], trans[3][2]);
     return o;
+}
+
+void Flux::Transform::setGlobalTranslation(EntityRef entity, const glm::vec3 &translation)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation, duh");
+        return;
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+
+    // parent_transform is local position to global position
+    // Therefore it's inverse is global position to local position
+    // Math.
+    auto parent_transform = getParentTransform(entity);
+
+    tc->transformation[3] = glm::inverse(parent_transform) * glm::vec4(translation, 1);
+    tc->has_changed = true;
+}
+
+glm::vec3 Flux::Transform::getRotation(EntityRef entity)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return glm::vec3(0, 0, 0);
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+
+    glm::vec3 rotation;
+    glm::extractEulerAngleXYZ(tc->transformation, rotation.x, rotation.y, rotation.z);
+
+    return rotation;
+}
+
+glm::vec3 Flux::Transform::getGlobalRotation(EntityRef entity)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return glm::vec3(0, 0, 0);
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+    auto parent_transform = getParentTransform(entity);
+
+    glm::vec3 rotation;
+    glm::extractEulerAngleXYZ(parent_transform * tc->transformation, rotation.x, rotation.y, rotation.z);
+
+    // rotation = glm::inverse(parent_transform) * glm::vec4(rotation, 1);
+
+    return rotation;
+}
+
+void Flux::Transform::setRotation(EntityRef entity, const glm::vec3& rotation)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return;
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+
+    // There's probably a better way of doing this...
+    glm::vec3 scales, translation;
+    scales = getScale(entity);
+    translation = getTranslation(entity);
+
+    // Create new Matrix with correct rotation
+    tc->transformation = glm::eulerAngleXYZ(rotation.x, rotation.y, rotation.z);
+    
+    // Add back Translation and scale
+    setTranslation(entity, translation);
+    setScale(entity, scales);
+}
+
+void Flux::Transform::setGlobalRotation(EntityRef entity, const glm::vec3& rotation)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return;
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+    auto parent_transform = getParentTransform(entity);
+
+    glm::vec3 local_rotation = glm::inverse(parent_transform) * glm::vec4(rotation, 1);
+
+    setRotation(entity, local_rotation);
+}
+
+glm::vec3 Transform::getScale(EntityRef entity)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return glm::vec3(0, 0, 0);
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+
+    // Load in transformation
+    glm::vec3 translation;
+    glm::vec3 scale;
+    glm::quat rotation_q;
+    glm::vec3 skew;
+    glm::vec4 perspective;
+    glm::decompose(tc->transformation, scale, rotation_q, translation, skew, perspective);
+
+    // Apparently the quaternion is incorrect...?
+    // We don't care about the rotation so this is not nessesairy
+    // rotation_q = glm::conjugate(rotation_q);
+    // rotation = glm::eulerAngles(rotation_q);
+
+    return scale;
+}
+
+void Transform::setScale(EntityRef entity, const glm::vec3& new_scale)
+{
+    if (!entity.hasComponent<TransformCom>())
+    {
+        LOG_WARN("Transform component required for transformation");
+        return;
+    }
+
+    auto tc = entity.getComponent<TransformCom>();
+
+    // Find scale
+    glm::vec3 old_scale;
+    old_scale = getScale(entity);
+
+    // Calculate the difference between the current scale and the target
+    glm::vec3 diff = new_scale - old_scale;
+
+    // Scale it by the difference
+    scale(entity, diff);
 }
 
 void Flux::Transform::CameraSystem::runSystem(EntityRef entity, float delta)

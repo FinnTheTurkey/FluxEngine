@@ -103,10 +103,10 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    #ifndef __APPLE__
+#ifndef __APPLE__
     // This is required on mac
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    #endif
+#endif
 
     // Create window
     // TODO: Fullscreen support
@@ -141,8 +141,8 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
 
     // Disable V-Sync
     // TODO: Make this an option
-    // glfwSwapInterval(0); // 1 for v-sync
-    glfwSwapInterval(1);
+    glfwSwapInterval(0); // 1 for v-sync
+    // glfwSwapInterval(1);
 
 #ifdef EMSCRIPTEN
     glfwSwapInterval(1);
