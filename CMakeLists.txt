@@ -87,6 +87,9 @@ add_library(FluxEngine STATIC
     Src/Renderer/Transform.cc
     Src/OpenGL/GLRenderer.cc
 
+    # Physics
+    Src/Physics/Physics.cc
+
     # Source files for GLFW window
     ${GLFW_SOURCE}
 )

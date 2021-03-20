@@ -608,15 +608,6 @@ void GLRendererSystem::onSystemStart()
 
 void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 {
-    // TODO: change (once systems are redone)
-    // if (entity.getEntityID() == 0)
-    // {
-    //     // First entity
-    //     // Calcualte projection matrix
-    //     // TODO: Customisable field of view
-    //     projection = glm::perspective(1.570796f, (float)current_window->width/current_window->height, 0.01f, 100.0f);
-    // }
-
     if (!entity.hasComponent<Flux::Renderer::MeshCom>())
     {
         // Doesn't have a mesh - we don't care
