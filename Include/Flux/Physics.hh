@@ -168,6 +168,8 @@ namespace DS
         int addExtrema(DS::ExtremaType type, float extrema, BoundingBox* box);
         int removeExtrema(DS::ExtremaType type, float extrema, BoundingBox* box);
 
+        void addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions);
+
         const int index;
         Chunk* linked_list;
         std::vector<Chunk*> array;
@@ -257,7 +259,9 @@ namespace DS
         FLUX_COMPONENT(BoundingCom, BoundingCom);
 
         BoundingBox* box;
+        BoundingWorld* world;
 
+        uint64_t frame;
         std::vector<BoundingBox*> collisions;
 
         bool setup;
@@ -269,6 +273,8 @@ namespace DS
     or a collision mesh (TODO: implement)
     */
     void giveBoundingBox(EntityRef entity);
+
+    std::vector<BoundingBox*> getBoundingBoxCollisions(EntityRef entity);
 
     class BroadPhaseSystem: public Flux::System
     {

@@ -608,6 +608,11 @@ void GLRendererSystem::onSystemStart()
 
 void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 {
+    if (entity.hasComponent<Flux::Transform::TransformCom>())
+    {
+        entity.getComponent<Flux::Transform::TransformCom>()->has_changed = false;
+    }
+
     if (!entity.hasComponent<Flux::Renderer::MeshCom>())
     {
         // Doesn't have a mesh - we don't care

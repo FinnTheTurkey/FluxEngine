@@ -82,40 +82,43 @@ int DS::SegmentedIntervalList::addExtrema(DS::ExtremaType type, float extrema, B
         auto new_chunk = new Chunk;
         new_chunk->extrema_amount = 0;
         new_chunk->next = nullptr;
-        for (int i = FLUX_SIL_CHUNK_SIZE/2; i < FLUX_SIL_CHUNK_SIZE; i++)
+        auto start_amount = chunk->extrema_amount;
+        for (int i = start_amount/2; i < start_amount; i++)
         {
-            new_chunk->extrema[i - FLUX_SIL_CHUNK_SIZE/2] = chunk->extrema[i];
+            chunk->extrema_amount --;
+            LOG_ASSERT_MESSAGE_FATAL(chunk->extrema_amount < 0, "Negative chunk?????");
+            new_chunk->extrema_amount ++;
+
+            new_chunk->extrema[i - start_amount/2] = chunk->extrema[i];
             if (chunk->extrema[i].type == ExtremaType::Minima)
             {
-                new_chunk->extrema[i - FLUX_SIL_CHUNK_SIZE/2].box->storage[index].minima_chunk = new_chunk;
-                new_chunk->extrema[i - FLUX_SIL_CHUNK_SIZE/2].box->storage[index].minima_chunk_index = i - FLUX_SIL_CHUNK_SIZE/2;
+                new_chunk->extrema[i - start_amount/2].box->storage[index].minima_chunk = new_chunk;
+                new_chunk->extrema[i - start_amount/2].box->storage[index].minima_chunk_index = i - start_amount/2;
+                LOG_ASSERT_MESSAGE_FATAL(new_chunk->extrema[i - start_amount/2].box->storage[index].minima_chunk_index >= new_chunk->extrema_amount, "Bad bad bad");
             }
             else
             {
-                new_chunk->extrema[i - FLUX_SIL_CHUNK_SIZE/2].box->storage[index].maxima_chunk = new_chunk;
-                new_chunk->extrema[i - FLUX_SIL_CHUNK_SIZE/2].box->storage[index].maxima_chunk_index = i - FLUX_SIL_CHUNK_SIZE/2;
+                new_chunk->extrema[i - start_amount/2].box->storage[index].maxima_chunk = new_chunk;
+                new_chunk->extrema[i - start_amount/2].box->storage[index].maxima_chunk_index = i - start_amount/2;
+                LOG_ASSERT_MESSAGE_FATAL(new_chunk->extrema[i - start_amount/2].box->storage[index].maxima_chunk_index >= new_chunk->extrema_amount, "Bad bad bad");
             }
 
             chunk->extrema[i].box = nullptr;
             chunk->extrema[i].pos = 0;
             chunk->extrema[i].type = Neither;
-
-            chunk->extrema_amount -= 1;
-            LOG_ASSERT_MESSAGE_FATAL(chunk->extrema_amount < 0, "Negative chunk?????");
-            new_chunk->extrema_amount ++;
         }
 
         // WARNING: If anything goes wrong, it's probably because of this
         // if (extrema_it != array.end())
         // {
-        array.insert(extrema_it+1, new_chunk);
+        auto new_it = array.insert(extrema_it+1, new_chunk);
         // }
         // else
         // {
         //     array.insert(extrema_it, new_chunk);
         // }
 
-        for (int i = 0; i < array.size(); i++)
+        for (int i = new_it - array.begin(); i < array.size(); i++)
         {
             // This could probably be done more efficiently...
             array[i]->index = i;
@@ -143,6 +146,8 @@ int DS::SegmentedIntervalList::addExtrema(DS::ExtremaType type, float extrema, B
         return value < info.pos;
     }) - chunk->extrema.begin();
 
+    LOG_ASSERT_MESSAGE_FATAL(chunk_extrema_index > chunk->extrema_amount, "New index too big");
+
     // Clear a space
     for (int i = chunk->extrema_amount-1; i >= chunk_extrema_index; i--)
     {
@@ -150,10 +155,12 @@ int DS::SegmentedIntervalList::addExtrema(DS::ExtremaType type, float extrema, B
         if (chunk->extrema[i+1].type == ExtremaType::Minima)
         {
             chunk->extrema[i+1].box->storage[index].minima_chunk_index = i+1;
+            LOG_ASSERT_MESSAGE_FATAL(chunk->extrema[i+1].box->storage[index].minima_chunk_index > chunk->extrema_amount, "Index is bigger than the array");
         }
         else
         {
             chunk->extrema[i+1].box->storage[index].maxima_chunk_index = i+1;
+            LOG_ASSERT_MESSAGE_FATAL(chunk->extrema[i+1].box->storage[index].maxima_chunk_index > chunk->extrema_amount, "Index is bigger than the array");
         }
     }
 
@@ -173,7 +180,7 @@ int DS::SegmentedIntervalList::addExtrema(DS::ExtremaType type, float extrema, B
         box->storage[index].maxima_chunk_index = chunk_extrema_index;
     }
 
-    return chunk_extrema_index;
+    return extrema_index;
 }
 
 void DS::SegmentedIntervalList::addBoundingBox(BoundingBox *box, float minima, float maxima)
@@ -244,7 +251,7 @@ int DS::SegmentedIntervalList::removeExtrema(DS::ExtremaType type, float extrema
     }
 
     // For debugging purposes, clear the extra item
-    // This shouldn't be nessesairy, but I'm doing it anyways
+    // This shouldn't be nessesary, but I'm doing it anyways
     chunk->extrema[chunk->extrema_amount-1].box = nullptr;
     chunk->extrema[chunk->extrema_amount-1].pos = 0;
     chunk->extrema[chunk->extrema_amount-1].type = Neither;
@@ -252,7 +259,21 @@ int DS::SegmentedIntervalList::removeExtrema(DS::ExtremaType type, float extrema
     chunk->extrema_amount --;
     LOG_ASSERT_MESSAGE_FATAL(chunk->extrema_amount < 0, "Negative chunk?????");
 
-    // TODO: Removing chunks
+    if (chunk->extrema_amount < 1 && array.size() > 1)
+    {
+        // Remove the chunk
+        auto before_index = chunk->index;
+        array.erase(array.begin() + chunk->index);
+        delete chunk;
+
+        // Now fix the indexes
+        for (int i = before_index; i < array.size(); i++)
+        {
+            // This could probably be done more efficiently...
+            array[i]->index = i;
+        }
+    }
+
     if (type == Maxima)
     {
         box->storage[index].maxima_chunk = nullptr;
@@ -300,6 +321,49 @@ void DS::SegmentedIntervalList::removeBoundingBox(BoundingBox *box, float minima
 
 static uint64_t pass = 1;
 
+void DS::SegmentedIntervalList::addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions)
+{
+    if (box == nullptr)
+    {
+        return;
+    }
+
+    if (box->pass < pass)
+    {
+        collisions.push_back(box);
+        box->pass = pass;
+        box->collisions[0] = false;
+        box->collisions[1] = false;
+        box->collisions[2] = false;
+        box->collisions[index] = true;
+    }
+    else
+    {
+        // Make sure we haven't collided yet
+        if (box->collisions[index] == true)
+        {
+            return;
+        }
+        
+        // Make sure it's collided in our previous tests
+        bool all_good = true;
+        for (auto in = 0; in < index; in ++)
+        {
+            if (!box->collisions[in])
+            {
+                all_good = false;
+                break;
+            }
+        }
+
+        if (all_good)
+        {
+            box->collisions[index] = true;
+            collisions.push_back(box);
+        }
+    }
+}
+
 std::vector<BoundingBox*> DS::SegmentedIntervalList::getCollidingBoxes(BoundingBox* box)
 {
     std::vector<BoundingBox*> collisions;
@@ -311,25 +375,26 @@ std::vector<BoundingBox*> DS::SegmentedIntervalList::getCollidingBoxes(BoundingB
     if (minima_chunk == maxima_chunk)
     {
         // Anything between these two will collide
-        // We don't care about duplicates, we'll get rid of those later
         Chunk* chunk = box->storage[index].minima_chunk;
 
         // Use resize so we only have 2 allocations
         const int sp = box->storage[index].minima_chunk_index+1;
-        collisions.resize(box->storage[index].maxima_chunk_index - box->storage[index].minima_chunk_index);
+        // collisions.resize(box->storage[index].maxima_chunk_index - box->storage[index].minima_chunk_index);
         for (int i = sp; i < box->storage[index].maxima_chunk_index; i++)
         {
             // collisions.push_back(chunk->extrema[i].box);
-            collisions[i - sp] = chunk->extrema[i].box;
+            // collisions[i - sp] = chunk->extrema[i].box;
+            addItemToCollisionList(chunk->extrema[i].box, i, collisions);
         }
 
         // Add checkpoints
         // Use a for loop because they're different types
         const int og_size = collisions.size();
-        collisions.resize(collisions.size() + chunk->checkpoint.size());
+        // collisions.resize(collisions.size() + chunk->checkpoint.size());
         for (int i = 0; i < chunk->checkpoint.size(); i++)
         {
-            collisions[og_size + i] = chunk->checkpoint[i].box;
+            // collisions[og_size + i] = chunk->checkpoint[i].box;
+            addItemToCollisionList(chunk->checkpoint[i].box, i, collisions);
         }
 
         return collisions;
@@ -340,69 +405,74 @@ std::vector<BoundingBox*> DS::SegmentedIntervalList::getCollidingBoxes(BoundingB
     // First chunk
     {
         Chunk* first_chunk = box->storage[index].minima_chunk;
-        collisions.resize(first_chunk->extrema_amount - box->storage[index].minima_chunk_index);
+        // collisions.resize(first_chunk->extrema_amount - box->storage[index].minima_chunk_index);
 
         const int sp = box->storage[index].minima_chunk_index+1;
         for (int i = sp; i < first_chunk->extrema_amount; i++)
         {
             // collisions.push_back(chunk->extrema[i].box);
-            collisions[i - sp] = first_chunk->extrema[i].box;
+            addItemToCollisionList(first_chunk->extrema[i].box, i, collisions);
+            // collisions[i - sp] = first_chunk->extrema[i].box;
         }
 
         // Add checkpoints
         // Use a for loop because they're different types
         const int og_size = collisions.size();
-        collisions.resize(collisions.size() + first_chunk->checkpoint.size());
+        // collisions.resize(collisions.size() + first_chunk->checkpoint.size());
         for (int i = 0; i < first_chunk->checkpoint.size(); i++)
         {
-            collisions[og_size + i] = first_chunk->checkpoint[i].box;
+            // collisions[og_size + i] = first_chunk->checkpoint[i].box;
+            addItemToCollisionList(first_chunk->checkpoint[i].box, i, collisions);
         }
     }
 
     // Middle chunks (if any)
     for (int chi = minima_chunk+1; chi < maxima_chunk; chi++)
     {
-        Chunk* chunk = box->storage[index].minima_chunk;
+        Chunk* chunk = array[chi];
         const int sp = collisions.size();
-        collisions.resize(collisions.size() + chunk->extrema_amount);
+        // collisions.resize(collisions.size() + chunk->extrema_amount);
         for (int i = 0; i < chunk->extrema_amount; i++)
         {
             // collisions.push_back(chunk->extrema[i].box);
-            collisions[sp + i] = chunk->extrema[i].box;
+            // collisions[sp + i] = chunk->extrema[i].box;
+            addItemToCollisionList(chunk->extrema[i].box, i, collisions);
         }
 
         // Add checkpoints
         // Use a for loop because they're different types
         const int og_size = collisions.size();
-        collisions.resize(collisions.size() + chunk->checkpoint.size());
+        // collisions.resize(collisions.size() + chunk->checkpoint.size());
         for (int i = 0; i < chunk->checkpoint.size(); i++)
         {
-            collisions[og_size + i] = chunk->checkpoint[i].box;
+            // collisions[og_size + i] = chunk->checkpoint[i].box;
+            addItemToCollisionList(chunk->checkpoint[i].box, i, collisions);
         }
     }
 
     // Last chunk
     {
-        Chunk* last_chunk = box->storage[index].minima_chunk;
+        Chunk* last_chunk = box->storage[index].maxima_chunk;
 
         const int sp = collisions.size();
-        collisions.resize(collisions.size() + box->storage[index].maxima_chunk_index+1);
+        // collisions.resize(collisions.size() + box->storage[index].maxima_chunk_index+1);
         for (int i = 0; i < box->storage[index].maxima_chunk_index; i++)
         {
-            collisions[sp + i] = last_chunk->extrema[i].box;
+            // collisions[sp + i] = last_chunk->extrema[i].box;
+            addItemToCollisionList(last_chunk->extrema[i].box, i, collisions);
         }
 
         // Add checkpoints
         // Use a for loop because they're different types
         const int og_size = collisions.size();
-        collisions.resize(collisions.size() + last_chunk->checkpoint.size());
+        // collisions.resize(collisions.size() + last_chunk->checkpoint.size());
         for (int i = 0; i < last_chunk->checkpoint.size(); i++)
         {
-            collisions[og_size + i] = last_chunk->checkpoint[i].box;
+            // collisions[og_size + i] = last_chunk->checkpoint[i].box;
+            addItemToCollisionList(last_chunk->checkpoint[i].box, i, collisions);
         }
     }
 
-    // To re-iterate: There _will_ be duplicates.
     return collisions;
 }
 
@@ -449,6 +519,11 @@ pass(0)
         LOG_WARN("Mesh is empty");
         return;
     }
+
+    // Reset storage
+    storage[0] = {nullptr, -1, nullptr, -1};
+    storage[1] = {nullptr, -1, nullptr, -1};
+    storage[2] = {nullptr, -1, nullptr, -1};
 
     // Start with a position in the mesh for the min and max
     min_pos = glm::vec3(mesh[0].x, mesh[0].y, mesh[0].x);
@@ -684,7 +759,6 @@ std::vector<BoundingBox*> BoundingWorld::getColliding(BoundingBox* box)
 
     std::vector<BoundingBox*> set;
 
-    // Add them to the set manually
     // Because apparently it's faster...?
     for (auto i : collisions_x)
     {
@@ -698,6 +772,8 @@ std::vector<BoundingBox*> BoundingWorld::getColliding(BoundingBox* box)
     {
         set.push_back(i);
     }
+
+    pass ++;
 
     return set;
 }
@@ -734,8 +810,12 @@ BroadPhaseSystem::BroadPhaseSystem()
 
 }
 
+static uint64_t frames = 0;
 void BroadPhaseSystem::onSystemAdded(ECSCtx* ctx) {}
-void BroadPhaseSystem::onSystemStart() {}
+void BroadPhaseSystem::onSystemStart() 
+{
+    frames ++;
+}
 
 void BroadPhaseSystem::runSystem(EntityRef entity, float delta)
 {
@@ -748,9 +828,11 @@ void BroadPhaseSystem::runSystem(EntityRef entity, float delta)
             // LOG_INFO("=== Initial Add");
             world.addBoundingBox(bc->box);
             bc->setup = true;
+            bc->world = &world;
         }
 
-        if (bc->box->updateTransform(tc->model))
+        if (tc->has_changed)
+        // if (bc->box->updateTransform(tc->model))
         {
             // Remove it and re-add it to the bounding world
             // TODO: Potencial for optimisations
@@ -760,6 +842,22 @@ void BroadPhaseSystem::runSystem(EntityRef entity, float delta)
             world.addBoundingBox(bc->box);
         }
 
-        bc->collisions = world.getColliding(bc->box);
+        // bc->collisions = world.getColliding(bc->box);
     }
+}
+
+std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef entity)
+{
+    if (entity.hasComponent<BoundingCom>())
+    {
+        auto bc = entity.getComponent<BoundingCom>();
+        if (bc->frame != frames)
+        {
+            bc->collisions = bc->world->getColliding(bc->box);
+        }
+
+        return bc->collisions;
+    }
+
+    return std::vector<BoundingBox*>();
 }
