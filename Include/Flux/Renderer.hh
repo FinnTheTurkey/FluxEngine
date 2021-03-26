@@ -749,6 +749,8 @@ namespace Transform
 
         bool visible;
 
+        bool global_visibility;
+
         bool has_changed = true;
 
         bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
@@ -904,7 +906,7 @@ namespace Transform
     /** Get the global transformation matrix for an entity */
     glm::mat4 getParentTransform(EntityRef entity);
 
-    glm::mat4 _getParentTransform(EntityRef entity, bool* has_changed);
+    glm::mat4 _getParentTransform(EntityRef entity, bool* has_changed, bool* visibility);
 
     void setVisible(EntityRef entity, bool vis);
 
@@ -1029,6 +1031,17 @@ namespace Transform
     If the given Entity has a parent, remove it
     */
     void removeParent(EntityRef entity);
+
+    class EndFrameSystem: public Flux::System
+    {
+        void runSystem(EntityRef entity, float delta) override
+        {
+            if (entity.hasComponent<Flux::Transform::TransformCom>())
+            {
+                entity.getComponent<Flux::Transform::TransformCom>()->has_changed = false;
+            }
+        }
+    };
 
 }
 }

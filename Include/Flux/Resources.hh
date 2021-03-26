@@ -414,6 +414,18 @@ namespace Flux { namespace Resources {
             {
                 return entity;
             }
+
+            /**
+            Get the pointer to the resource. This should be used when
+            changing a resource every frame, because using the -> operator,
+            and resource ref's gc is quite slow.
+            If you're storing a reference to the resource, use a resource ref
+            so that it still gets GCed.
+            */
+            T* getPtr()
+            {
+                return (T*)entity.getComponent<Resource>();
+            }
     };
 
     /**

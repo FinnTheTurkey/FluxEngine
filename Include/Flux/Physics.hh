@@ -161,7 +161,7 @@ namespace DS
         /** Detect of 2 bounding boxes are colliding */
         // bool detectCollision(BoundingBox* boxa, BoundingBox* boxb);
 
-        /** Get all other boxes colliding with this box. WARNING: Output may contain duplicates */
+        /** Get all other boxes colliding with this box. */
         std::vector<BoundingBox*> getCollidingBoxes(BoundingBox* box);
 
     private:
@@ -174,12 +174,47 @@ namespace DS
         Chunk* linked_list;
         std::vector<Chunk*> array;
     };
+
+    class SortedExtremaList
+    {
+    public:
+        SortedExtremaList(const int index);
+        ~SortedExtremaList();
+
+        /** Adds a bounding box. Simple as that */
+        void addBoundingBox(BoundingBox* box, float minima, float maxima);
+
+        /** Remove your bounding box */
+        void removeBoundingBox(BoundingBox* box, float minima, float maxima);
+
+        /** Update the bounding box with new positional values */
+        // void updateBoundingBox(BoundingBox* box, float minima, float maxima);
+
+        /** Sort the list, which has the small, tiny, barely worth mentioning side effect
+            of _calculating every single collision in the entire scene_ */
+        void sort();
+
+        /** Get all other boxes colliding with this box. */
+        std::vector<BoundingBox*> getCollidingBoxes(BoundingBox* box);
+    private:
+        void addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions);
+
+        const int index;
+        std::vector<Extrema> extrema;
+    };
 }
 
     class BoundingBox
     {
     public:
-        BoundingBox():pass(0) {};
+        BoundingBox():
+        min_pos(0, 0, 0),
+        max_pos(0, 0, 0),
+        og_min_pos(0, 0, 0),
+        og_max_pos(0, 0, 0),
+        current_transform(),
+        has_display(false),
+        pass(0) {};
         BoundingBox(Renderer::Vertex* mesh, uint32_t size);
 
         /**
@@ -195,6 +230,8 @@ namespace DS
 
         glm::vec3 min_pos;
         glm::vec3 max_pos;
+        glm::vec3 og_min_pos;
+        glm::vec3 og_max_pos;
 
         DS::BBInfo storage[3];
 
@@ -205,9 +242,6 @@ namespace DS
     private:
         bool has_display;
         EntityRef display;
-
-        glm::vec3 og_min_pos;
-        glm::vec3 og_max_pos;
 
         glm::mat4 current_transform;
 
@@ -249,14 +283,52 @@ namespace DS
 
     private:
 
-        DS::SegmentedIntervalList x_axis;
-        DS::SegmentedIntervalList y_axis;
-        DS::SegmentedIntervalList z_axis;
+        // DS::SegmentedIntervalList x_axis;
+        // DS::SegmentedIntervalList y_axis;
+        // DS::SegmentedIntervalList z_axis;
+
+        DS::SortedExtremaList x_axis;
+        DS::SortedExtremaList y_axis;
+        DS::SortedExtremaList z_axis;
     };
 
     struct BoundingCom: public Flux::Component
     {
         FLUX_COMPONENT(BoundingCom, BoundingCom);
+
+        bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
+        {
+            output->set(box->og_min_pos.x);
+            output->set(box->og_min_pos.y);
+            output->set(box->og_min_pos.z);
+
+            output->set(box->og_max_pos.x);
+            output->set(box->og_max_pos.y);
+            output->set(box->og_max_pos.z);
+
+            return true;
+        }
+
+        void deserialize(Resources::Deserializer *deserializer, FluxArc::BinaryFile *file) override
+        {
+            // Manually fill the bounding box
+            box = new BoundingBox;
+
+            box->storage[1] = {nullptr, -1, nullptr, -1};
+            box->storage[0] = {nullptr, -1, nullptr, -1};
+            box->storage[2] = {nullptr, -1, nullptr, -1};
+            
+            file->get(&box->og_min_pos.x);
+            file->get(&box->og_min_pos.y);
+            file->get(&box->og_min_pos.z);
+
+            file->get(&box->og_max_pos.x);
+            file->get(&box->og_max_pos.y);
+            file->get(&box->og_max_pos.z);
+
+            setup = false;
+            collisions = std::vector<BoundingBox* >();
+        }
 
         BoundingBox* box;
         BoundingWorld* world;
@@ -273,6 +345,7 @@ namespace DS
     or a collision mesh (TODO: implement)
     */
     void giveBoundingBox(EntityRef entity);
+    void giveBoundingBox(EntityRef entity, glm::vec3 min_pos, glm::vec3 max_pos);
 
     std::vector<BoundingBox*> getBoundingBoxCollisions(EntityRef entity);
 
@@ -280,12 +353,14 @@ namespace DS
     {
     private:
         BoundingWorld world;
+
     public:
         BroadPhaseSystem();
+
         void onSystemAdded(ECSCtx* ctx) override;
         void onSystemStart() override;
-
         void runSystem(EntityRef entity, float delta) override;
+        void onSystemEnd() override;
     };
 
 }}

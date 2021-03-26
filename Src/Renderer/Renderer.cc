@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "Flux/Log.hh"
+#include "Flux/Physics.hh"
 #include "Flux/Renderer.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Resources.hh"
@@ -257,6 +258,9 @@ void Renderer::addPointLight(EntityRef entity, float radius, const glm::vec3& co
     lc->direction = glm::vec3(0);
     lc->inducted = false;
     entity.addComponent(lc);
+
+    // Add bounding box
+    Flux::Physics::giveBoundingBox(entity, glm::vec3(-radius/2, -radius/2, -radius/2), glm::vec3(radius/2, radius/2, radius/2));
 }
 
 void Renderer::addDirectionalLight(EntityRef entity, const glm::vec3& direction, float radius, glm::vec3 color)
@@ -275,6 +279,9 @@ void Renderer::addDirectionalLight(EntityRef entity, const glm::vec3& direction,
     lc->direction = direction;
     lc->inducted = false;
     entity.addComponent(lc);
+
+    // Add bounding box
+    Flux::Physics::giveBoundingBox(entity, glm::vec3(-radius/2, -radius/2, -radius/2), glm::vec3(radius/2, radius/2, radius/2));
 }
 
 void Renderer::addSpotLight(EntityRef entity, float cutoff_radians, float radius, glm::vec3 color)
@@ -293,6 +300,9 @@ void Renderer::addSpotLight(EntityRef entity, float cutoff_radians, float radius
     lc->direction = glm::vec3(0, 0, 0);
     lc->inducted = false;
     entity.addComponent(lc);
+
+    // Add bounding box
+    Flux::Physics::giveBoundingBox(entity, glm::vec3(-radius/2, -radius/2, -radius/2), glm::vec3(radius/2, radius/2, radius/2));
 }
 
 Renderer::LightSystem::LightSystem()
@@ -371,7 +381,6 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
 
     if (!entity.hasComponent<LightInfoCom>())
     {
-
         // Calculate initial lighting
         int light_count = 0;
         auto lightinfo = new LightInfoCom;

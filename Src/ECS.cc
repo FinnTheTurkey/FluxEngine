@@ -220,6 +220,7 @@ void Flux::ECSCtx::_addComponent(int entity, ComponentTypeID component_type, Com
     {
         #ifndef FLUX_NO_WARN_OVERRIDE_COMPONENT
         LOG_WARN("Component already exists - overwriting (disable this warning by defining FLUX_NO_WARN_OVERRIDE_COMPONENT)");
+        // ((std::vector<int>*)entities[455]->components[88])->back();
         #endif
 
         _removeComponent(entity, component_type);

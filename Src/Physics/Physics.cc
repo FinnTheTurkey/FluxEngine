@@ -500,6 +500,149 @@ std::vector<BoundingBox*> DS::SegmentedIntervalList::getCollidingBoxes(BoundingB
 // }
 
 // ==================================================
+// Sorted Extrema List
+// ==================================================
+DS::SortedExtremaList::SortedExtremaList(const int index):
+index(index)
+{
+
+}
+
+void DS::SortedExtremaList::addBoundingBox(BoundingBox* box, float minima, float maxima)
+{
+    // Add the 2 extrema in the right place
+    auto minima_it = std::upper_bound(extrema.begin(), extrema.end(), minima, 
+                [](const float& value, Extrema& info) {
+        return value < info.pos;
+    });
+
+    auto mit = extrema.insert(minima_it, Extrema {Minima, box, minima});
+
+    auto maxima_it = std::upper_bound(extrema.begin(), extrema.end(), minima, 
+                [](const float& value, Extrema& info) {
+        return value < info.pos;
+    });
+
+    auto mat = extrema.insert(maxima_it, Extrema {Maxima, box, maxima});
+
+    // The insertion of the Maxima after the minima shouldn't effect the minima's index
+    box->storage[index].minima_chunk_index = mit - extrema.begin();
+    box->storage[index].maxima_chunk_index = mat - extrema.begin();
+}
+
+void DS::SortedExtremaList::removeBoundingBox(BoundingBox *box, float minima, float maxima)
+{
+    extrema.erase(extrema.begin() + box->storage[index].maxima_chunk_index);
+    extrema.erase(extrema.begin() + box->storage[index].minima_chunk_index);
+
+    // Re-sort
+    sort();
+}
+
+void DS::SortedExtremaList::sort()
+{
+    // Basically just your standard insertion sort
+    int j;
+    // Extrema& key;
+    for (int i = 0; i < extrema.size(); i++)
+    {
+        Extrema& key = extrema[i];
+
+        // Make key up to date
+        if (key.type == Minima)
+        {
+            key.pos = key.box->min_pos[index];
+        }
+        else
+        {
+            key.pos = key.box->max_pos[index];
+        }
+
+        j = i;
+        while (j > 0 && extrema[j-1] > key)
+        {
+            extrema[j] = extrema[j-1];
+
+            // Update index
+            if (extrema[j].type == Minima)
+            {
+                extrema[j].box->storage[index].minima_chunk_index = j;
+            }
+            else
+            {
+                extrema[j].box->storage[index].maxima_chunk_index = j;
+            }
+            j--;
+        }
+
+        extrema[j] = key;
+        if (extrema[j].type == Minima)
+        {
+            extrema[j].box->storage[index].minima_chunk_index = j;
+        }
+        else
+        {
+            extrema[j].box->storage[index].maxima_chunk_index = j;
+        }
+    }
+}
+
+void DS::SortedExtremaList::addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions)
+{
+    if (box == nullptr)
+    {
+        return;
+    }
+
+    if (box->pass < pass)
+    {
+        collisions.push_back(box);
+        box->pass = pass;
+        box->collisions[0] = false;
+        box->collisions[1] = false;
+        box->collisions[2] = false;
+        box->collisions[index] = true;
+    }
+    else
+    {
+        // Make sure we haven't collided yet
+        if (box->collisions[index] == true)
+        {
+            return;
+        }
+        
+        // Make sure it's collided in our previous tests
+        bool all_good = true;
+        for (auto in = 0; in < index; in ++)
+        {
+            if (!box->collisions[in])
+            {
+                all_good = false;
+                break;
+            }
+        }
+
+        if (all_good)
+        {
+            box->collisions[index] = true;
+            collisions.push_back(box);
+        }
+    }
+}
+
+std::vector<BoundingBox*> DS::SortedExtremaList::getCollidingBoxes(BoundingBox* box)
+{
+    std::vector<BoundingBox*> collisions;
+    
+    for (int i = box->storage[index].minima_chunk_index+1; i < box->storage[index].maxima_chunk_index; i++)
+    {
+        addItemToCollisionList(box, i, collisions);
+    }
+
+    return collisions;
+}
+
+// ==================================================
 // Bounding Box
 // ==================================================
 
@@ -744,11 +887,9 @@ void BoundingWorld::removeBoundingBox(BoundingBox *box)
 
 void BoundingWorld::processCollisions(float delta)
 {
-    // I added this function a few days ago
-    // I have no idea what it's meant to do
-    // But I must've added it for a reason,
-    // So I'm not going to delete it
-    // _At least not yet_
+    x_axis.sort();
+    y_axis.sort();
+    z_axis.sort();
 }
 
 std::vector<BoundingBox*> BoundingWorld::getColliding(BoundingBox* box)
@@ -803,6 +944,27 @@ void Flux::Physics::giveBoundingBox(EntityRef entity)
     entity.addComponent(com);
 }
 
+void Flux::Physics::giveBoundingBox(EntityRef entity, glm::vec3 min_pos, glm::vec3 max_pos)
+{
+    // Add a bounding box made from the entities mesh
+    auto com = new BoundingCom;
+
+    com->box = new BoundingBox();
+
+    com->box->storage[1] = {nullptr, -1, nullptr, -1};
+    com->box->storage[0] = {nullptr, -1, nullptr, -1};
+    com->box->storage[2] = {nullptr, -1, nullptr, -1};
+
+    com->box->og_min_pos = min_pos;
+    com->box->og_max_pos = max_pos;
+    com->box->min_pos = min_pos;
+    com->box->max_pos = max_pos;
+
+    com->setup = false;
+    com->collisions = std::vector<BoundingBox* >();
+    entity.addComponent(com);
+}
+
 // The system
 BroadPhaseSystem::BroadPhaseSystem()
 :world()
@@ -834,16 +996,25 @@ void BroadPhaseSystem::runSystem(EntityRef entity, float delta)
         if (tc->has_changed)
         // if (bc->box->updateTransform(tc->model))
         {
+            // Only update the bounding box,
+            // The rest will update itself
+            bc->box->updateTransform(tc->model);
+            
             // Remove it and re-add it to the bounding world
             // TODO: Potencial for optimisations
             // LOG_INFO("=== Remove");
-            world.removeBoundingBox(bc->box);
+            // world.removeBoundingBox(bc->box);
             // LOG_INFO("=== Add");
-            world.addBoundingBox(bc->box);
+            // world.addBoundingBox(bc->box);
         }
 
         // bc->collisions = world.getColliding(bc->box);
     }
+}
+
+void BroadPhaseSystem::onSystemEnd() 
+{
+    world.processCollisions(0);
 }
 
 std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef entity)

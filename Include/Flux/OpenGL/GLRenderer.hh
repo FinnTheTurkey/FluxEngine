@@ -169,7 +169,7 @@ namespace Flux { namespace GLRenderer {
     {
     private:
         void initGLMaterial(Flux::Renderer::MeshCom* mesh);
-        void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res);
+        void dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Renderer::MaterialRes* mat_res, GLShaderCom* shader_res);
         void dealWithLights();
         bool setup_lighting = false;
 

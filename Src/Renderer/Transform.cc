@@ -59,10 +59,11 @@ void Transform::setVisible(EntityRef entity, bool vis)
 glm::mat4 Transform::getParentTransform(EntityRef entity)
 {
     auto b = false;
-    return _getParentTransform(entity, &b);
+    auto v = true;
+    return _getParentTransform(entity, &b, &v);
 }
 
-glm::mat4 Transform::_getParentTransform(EntityRef entity, bool* has_changed)
+glm::mat4 Transform::_getParentTransform(EntityRef entity, bool* has_changed, bool* visible)
 {
     if (entity.hasComponent<Flux::Transform::TransformCom>())
     {
@@ -72,6 +73,11 @@ glm::mat4 Transform::_getParentTransform(EntityRef entity, bool* has_changed)
         {
             *has_changed = true;
         }
+
+        if (tc->visible == false)
+        {
+            *visible = false;
+        }
         
         if (tc->has_parent)
         {
@@ -80,7 +86,7 @@ glm::mat4 Transform::_getParentTransform(EntityRef entity, bool* has_changed)
                 // ...?
                 return tc->transformation;
             }
-            auto output = _getParentTransform(tc->parent, has_changed) * tc->transformation;
+            auto output = _getParentTransform(tc->parent, has_changed, visible) * tc->transformation;
             if (*has_changed != tc->has_changed)
             {
                 tc->has_changed = *has_changed;
@@ -403,11 +409,14 @@ void Flux::Transform::TransformationSystem::runSystem(EntityRef entity, float de
 
         // Recursivly add parent transform, as well
         // TODO: Maybe make this more efficient?
-        auto pt = getParentTransform(entity);
+        bool vis = true;
+        bool has_changed = false;
+        auto pt = _getParentTransform(entity, &has_changed, &vis);
 
         auto mv = cc->view_matrix * pt;
         tc->model_view = mv;
         tc->model = pt;
+        tc->global_visibility = vis;
     }
 }
 

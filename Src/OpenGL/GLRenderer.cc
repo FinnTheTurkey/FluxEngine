@@ -1,6 +1,7 @@
 #include "Flux/OpenGL/GLRenderer.hh"
 #include "Flux/ECS.hh"
 #include "Flux/Log.hh"
+#include "Flux/Physics.hh"
 #include "Flux/Renderer.hh"
 #include "Flux/Input.hh"
 
@@ -105,6 +106,8 @@ lights(new Renderer::LightSystem)
 void GLRendererSystem::onSystemAdded(ECSCtx *ctx)
 {
     ctx->addSystemFront(lights);
+    ctx->addSystemFront(new Flux::Physics::BroadPhaseSystem);
+    ctx->addSystemBack(new Flux::Transform::EndFrameSystem);
 }
 
 void GLRendererSystem::dealWithLights()
@@ -181,7 +184,7 @@ void GLRendererSystem::dealWithLights()
     }
 }
 
-void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Resources::ResourceRef<Flux::Renderer::MaterialRes> mat_res, GLShaderCom* shader_res)
+void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Renderer::MaterialRes* mat_res, GLShaderCom* shader_res)
 {
     bool create = false;
     if (!mesh->mat_resource.getBaseEntity().hasComponent<GLUniformCom>())
@@ -496,7 +499,8 @@ void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
 
     // This large block of code adds shaders to the shader resource referenced
     // by the material resource if it doesn't already have them
-    auto mat_res = mesh->mat_resource;
+    auto mat_res_en = mesh->mat_resource.getBaseEntity();
+    auto mat_res = mesh->mat_resource.getPtr();
     if (!mat_res->shaders.getBaseEntity().hasComponent<GLShaderCom>())
     {
         // Find the resources
@@ -586,7 +590,7 @@ void GLRendererSystem::initGLMaterial(Flux::Renderer::MeshCom* mesh)
     // Custom Uniforms
     // This creates a Uniform Buffer if one doesn't already exist
     // Don't know if we need this if statement
-    if (!mat_res.getBaseEntity().hasComponent<GLUniformCom>())
+    if (!mat_res_en.hasComponent<GLUniformCom>())
     {
         // Make shaders active
         GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
@@ -603,19 +607,27 @@ void GLRendererSystem::onSystemStart()
 
     // Make sure the lights are in the correct positions
     dealWithLights();
-    
 }
 
 void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 {
-    if (entity.hasComponent<Flux::Transform::TransformCom>())
-    {
-        entity.getComponent<Flux::Transform::TransformCom>()->has_changed = false;
-    }
+    // if (entity.hasComponent<Flux::Transform::TransformCom>())
+    // {
+    //     entity.getComponent<Flux::Transform::TransformCom>()->has_changed = false;
+    // }
 
     if (!entity.hasComponent<Flux::Renderer::MeshCom>())
     {
         // Doesn't have a mesh - we don't care
+        return;
+    }
+
+    Flux::Transform::TransformCom* trans_com = entity.getComponent<Flux::Transform::TransformCom>();
+
+    if (!trans_com->global_visibility)
+    {
+        // Don't actually render
+        // LOG_INFO("Not rendering");
         return;
     }
 
@@ -695,19 +707,11 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
         entity.addComponent(new GLEntityCom);
     }
 
-    auto mat_res = mesh->mat_resource;
+    auto mat_res = mesh->mat_resource.getPtr();
 
     // Actually render
     GLMeshCom* mesh_com = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
     GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
-    Flux::Transform::TransformCom* trans_com = entity.getComponent<Flux::Transform::TransformCom>();
-
-    // TODO: Try to make this more efficient
-    if (!Flux::Transform::getVisibility(entity))
-    {
-        // Don't actually render
-        return;
-    }
 
     glUseProgram(shader_com->shader_program);
 
@@ -734,7 +738,7 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
     glDrawElements(mesh_com->draw_type, mesh_com->num_indices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 
-    trans_com->has_changed = false;
+    // trans_com->has_changed = false;
 
 }
 
