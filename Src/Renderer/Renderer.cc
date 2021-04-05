@@ -110,6 +110,16 @@ void Flux::Renderer::setUniform(Resources::ResourceRef<MaterialRes> res, const s
 {
     // auto mr = (MaterialRes*)Resources::getResource(res);
 
+    if (res->uniforms.find(name) != res->uniforms.end())
+    {
+        // Just change the value
+        LOG_ASSERT_MESSAGE(res->uniforms[name].type != UniformType::Vector3, "Wrong uniform type: Expected Vector3");
+        delete (glm::vec3*)res->uniforms[name].value;
+        res->uniforms[name].value = new glm::vec3(v);
+        res->changed = true;
+        return;
+    }
+
     Uniform us;
     us.location = -1;
     us.type = UniformType::Vector3;
@@ -388,16 +398,38 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
         {
             if (lights[i].getEntityID() != -1)
             {
-                auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
-                if (glm::distance(light_pos, position) <= lights[i].getComponent<LightCom>()->radius)
+                if (entity.hasComponent<Physics::BoundingCom>())
                 {
-                    lightinfo->effected_lights[light_count] = i;
-                    light_count ++;
-                    if (light_count == 8)
+                    // Use bounding box for collision
+                    auto box_en = entity.getComponent<Physics::BoundingCom>()->box;
+                    auto box_li = lights[i].getComponent<Physics::BoundingCom>()->box;
+                    if ((box_en->min_pos.x <= box_li->max_pos.x && box_en->max_pos.x >= box_li->min_pos.x)
+                        && (box_en->min_pos.y <= box_li->max_pos.y && box_en->max_pos.y >= box_li->min_pos.y)
+                        && (box_en->min_pos.z <= box_li->max_pos.z && box_en->max_pos.z >= box_li->min_pos.z))
                     {
-                        // We've reached max lights
-                        break;
+                        lightinfo->effected_lights[light_count] = i;
+                        light_count ++;
+                        if (light_count == 8)
+                        {
+                            // We've reached max lights
+                            break;
+                        }
                     }
+                }
+                else
+                {
+                    // Use the old, slow method
+                    // auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                    // if (glm::distance(light_pos, position) <= lights[i].getComponent<LightCom>()->radius)
+                    // {
+                    //     lightinfo->effected_lights[light_count] = i;
+                    //     light_count ++;
+                    //     if (light_count == 8)
+                    //     {
+                    //         // We've reached max lights
+                    //         break;
+                    //     }
+                    // }
                 }
             }
         }
@@ -424,23 +456,44 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
         {
             if (lights[i].getEntityID() != -1)
             {
-                auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
-                auto lc = lights[i].getComponent<LightCom>();
-                if (lc == nullptr)
+                if (entity.hasComponent<Physics::BoundingCom>())
                 {
-                    LOG_WARN("How the hell did a non-light get into the lights array???");
-                    continue;
-                }
-                
-                if (glm::distance(light_pos, position) <= lc->radius)
-                {
-                    lightinfo->effected_lights[light_count] = i;
-                    light_count ++;
-                    if (light_count == 8)
+                    auto box_en = entity.getComponent<Physics::BoundingCom>()->box;
+                    auto box_li = lights[i].getComponent<Physics::BoundingCom>()->box;
+                    if ((box_en->min_pos.x <= box_li->max_pos.x && box_en->max_pos.x >= box_li->min_pos.x)
+                        && (box_en->min_pos.y <= box_li->max_pos.y && box_en->max_pos.y >= box_li->min_pos.y)
+                        && (box_en->min_pos.z <= box_li->max_pos.z && box_en->max_pos.z >= box_li->min_pos.z))
                     {
-                        // We've reached max lights
-                        break;
+                        lightinfo->effected_lights[light_count] = i;
+                        light_count ++;
+                        if (light_count == 8)
+                        {
+                            // We've reached max lights
+                            break;
+                        }
                     }
+                }
+                else
+                {
+                    // Old, bad method
+                    // auto light_pos = glm::vec3(lights[i].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                    // auto lc = lights[i].getComponent<LightCom>();
+                    // if (lc == nullptr)
+                    // {
+                    //     LOG_WARN("How the hell did a non-light get into the lights array???");
+                    //     continue;
+                    // }
+                    
+                    // if (glm::distance(light_pos, position) <= lc->radius)
+                    // {
+                    //     lightinfo->effected_lights[light_count] = i;
+                    //     light_count ++;
+                    //     if (light_count == 8)
+                    //     {
+                    //         // We've reached max lights
+                    //         break;
+                    //     }
+                    // }
                 }
             }
         }
@@ -464,37 +517,83 @@ void Renderer::LightSystem::runSystem(EntityRef entity, float delta)
             {
                 if (l == lightinfo->effected_lights[i])
                 {
-                    // Re-calculate that light
-                    auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
-                    if (glm::distance(light_pos, position) > lights[l].getComponent<LightCom>()->radius)
+                    if (entity.hasComponent<Physics::BoundingCom>())
                     {
-                        // Remove that light from the list
-                        // Move every light after it forward
-                        for (int li = i; i < 7; i++)
+                        auto box_en = entity.getComponent<Physics::BoundingCom>()->box;
+                        auto box_li = lights[l].getComponent<Physics::BoundingCom>()->box;
+                        if (!((box_en->min_pos.x <= box_li->max_pos.x && box_en->max_pos.x >= box_li->min_pos.x)
+                            && (box_en->min_pos.y <= box_li->max_pos.y && box_en->max_pos.y >= box_li->min_pos.y)
+                            && (box_en->min_pos.z <= box_li->max_pos.z && box_en->max_pos.z >= box_li->min_pos.z)))
                         {
-                            lightinfo->effected_lights[li] = lightinfo->effected_lights[li + 1];
+                            // Remove that light from the list
+                            // Move every light after it forward
+                            for (int li = i; i < 7; i++)
+                            {
+                                lightinfo->effected_lights[li] = lightinfo->effected_lights[li + 1];
+                            }
+                            lightinfo->effected_lights[7] = -1;
+                            is_current = true;
+
+                            // LOG_INFO("Removing Light");
                         }
-                        lightinfo->effected_lights[7] = -1;
-                        is_current = true;
+                    }
+                    else
+                    {
+                        // Re-calculate that light
+                        // auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                        // if (glm::distance(light_pos, position) > lights[l].getComponent<LightCom>()->radius)
+                        // {
+                        //     // Remove that light from the list
+                        //     // Move every light after it forward
+                        //     for (int li = i; i < 7; i++)
+                        //     {
+                        //         lightinfo->effected_lights[li] = lightinfo->effected_lights[li + 1];
+                        //     }
+                        //     lightinfo->effected_lights[7] = -1;
+                        //     is_current = true;
+                        // }
                     }
                 }
             }
 
             if (!is_current)
             {
-                auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
-                if (glm::distance(light_pos, position) <= lights[l].getComponent<LightCom>()->radius)
+                if (entity.hasComponent<Physics::BoundingCom>())
                 {
-                    // Add this light
-                    for (int i = 0; i < 8; i++)
+                    auto box_en = entity.getComponent<Physics::BoundingCom>()->box;
+                    auto box_li = lights[l].getComponent<Physics::BoundingCom>()->box;
+                    if ((box_en->min_pos.x <= box_li->max_pos.x && box_en->max_pos.x >= box_li->min_pos.x)
+                        && (box_en->min_pos.y <= box_li->max_pos.y && box_en->max_pos.y >= box_li->min_pos.y)
+                        && (box_en->min_pos.z <= box_li->max_pos.z && box_en->max_pos.z >= box_li->min_pos.z))
                     {
-                        if (lightinfo->effected_lights[i] == -1)
+                        // Add this light
+                        for (int i = 0; i < 8; i++)
                         {
-                            // Put it here
-                            lightinfo->effected_lights[i] = l;
-                            break;
+                            if (lightinfo->effected_lights[i] == -1)
+                            {
+                                // Put it here
+                                lightinfo->effected_lights[i] = l;
+                                break;
+                            }
                         }
                     }
+                }
+                else
+                {
+                    // auto light_pos = glm::vec3(lights[l].getComponent<Transform::TransformCom>()->model * glm::vec4(0,0,0,1));
+                    // if (glm::distance(light_pos, position) <= lights[l].getComponent<LightCom>()->radius)
+                    // {
+                    //     // Add this light
+                    //     for (int i = 0; i < 8; i++)
+                    //     {
+                    //         if (lightinfo->effected_lights[i] == -1)
+                    //         {
+                    //             // Put it here
+                    //             lightinfo->effected_lights[i] = l;
+                    //             break;
+                    //         }
+                    //     }
+                    // }
                 }
             }
         }

@@ -65,6 +65,7 @@ add_library(FluxEngine STATIC
     Include/Flux/Flux.hh
     Include/Flux/ECS.hh
     Include/Flux/Log.hh
+    Include/Flux/Debug.hh
     # Include/Flux/Threads.hh
     Include/Flux/Resources.hh
     Include/Flux/Input.hh
@@ -79,6 +80,7 @@ add_library(FluxEngine STATIC
     Src/Entry.cc
     Src/Threads.cc
     Src/DevTools/Log.cc
+    Src/DevTools/Debug.cc
     Src/Res/Resources.cc
     Src/Res/Serialize.cc
 

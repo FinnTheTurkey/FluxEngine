@@ -5,7 +5,9 @@
 
 // TODO: Remove ASAP
 #include "Flux/OpenGL/GLRenderer.hh"
+#include "glm/detail/func_geometric.hpp"
 #include <algorithm>
+#include <cfloat>
 
 using namespace Flux::Physics;
 
@@ -518,7 +520,7 @@ void DS::SortedExtremaList::addBoundingBox(BoundingBox* box, float minima, float
 
     auto mit = extrema.insert(minima_it, Extrema {Minima, box, minima});
 
-    auto maxima_it = std::upper_bound(extrema.begin(), extrema.end(), minima, 
+    auto maxima_it = std::upper_bound(extrema.begin(), extrema.end(), maxima, 
                 [](const float& value, Extrema& info) {
         return value < info.pos;
     });
@@ -528,6 +530,9 @@ void DS::SortedExtremaList::addBoundingBox(BoundingBox* box, float minima, float
     // The insertion of the Maxima after the minima shouldn't effect the minima's index
     box->storage[index].minima_chunk_index = mit - extrema.begin();
     box->storage[index].maxima_chunk_index = mat - extrema.begin();
+
+    // Sort to update indexes
+    sort();
 }
 
 void DS::SortedExtremaList::removeBoundingBox(BoundingBox *box, float minima, float maxima)
@@ -541,12 +546,10 @@ void DS::SortedExtremaList::removeBoundingBox(BoundingBox *box, float minima, fl
 
 void DS::SortedExtremaList::sort()
 {
-    // Basically just your standard insertion sort
-    int j;
-    // Extrema& key;
+    // Update all the extrema
     for (int i = 0; i < extrema.size(); i++)
     {
-        Extrema& key = extrema[i];
+        Extrema key = extrema[i];
 
         // Make key up to date
         if (key.type == Minima)
@@ -558,8 +561,17 @@ void DS::SortedExtremaList::sort()
             key.pos = key.box->max_pos[index];
         }
 
+        extrema[i] = key;
+    }
+
+    // Basically just your standard insertion sort
+    int j;
+    for (int i = 1; i < extrema.size(); i++)
+    {
+        Extrema key = extrema[i];
+
         j = i;
-        while (j > 0 && extrema[j-1] > key)
+        while (j > 0 && extrema[j-1].pos > key.pos)
         {
             extrema[j] = extrema[j-1];
 
@@ -572,6 +584,7 @@ void DS::SortedExtremaList::sort()
             {
                 extrema[j].box->storage[index].maxima_chunk_index = j;
             }
+
             j--;
         }
 
@@ -585,18 +598,36 @@ void DS::SortedExtremaList::sort()
             extrema[j].box->storage[index].maxima_chunk_index = j;
         }
     }
+
+    // std::sort varient
+    // A tiny bit slower than insertion sort
+    // {
+    //     std::sort(extrema.begin(), extrema.end());
+
+    //     // Fix indexes
+    //     for (int i = 0; i < extrema.size(); i++)
+    //     {
+    //         if (extrema[i].type == Minima)
+    //         {
+    //             extrema[i].box->storage[index].minima_chunk_index = i;
+    //         }
+    //         else
+    //         {
+    //             extrema[i].box->storage[index].maxima_chunk_index = i;
+    //         }
+    //     }
+    // }
 }
 
 void DS::SortedExtremaList::addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions)
 {
-    if (box == nullptr)
-    {
-        return;
-    }
-
+    // This if loop is magical
+    // Whenever I remove it, performance tanks
     if (box->pass < pass)
     {
-        collisions.push_back(box);
+        // collisions.push_back(box);
+        collisions[i] = box;
+        // LOG_INFO("Added thing");
         box->pass = pass;
         box->collisions[0] = false;
         box->collisions[1] = false;
@@ -605,38 +636,23 @@ void DS::SortedExtremaList::addItemToCollisionList(BoundingBox* box, int i, std:
     }
     else
     {
-        // Make sure we haven't collided yet
-        if (box->collisions[index] == true)
-        {
-            return;
-        }
-        
-        // Make sure it's collided in our previous tests
-        bool all_good = true;
-        for (auto in = 0; in < index; in ++)
-        {
-            if (!box->collisions[in])
-            {
-                all_good = false;
-                break;
-            }
-        }
-
-        if (all_good)
-        {
-            box->collisions[index] = true;
-            collisions.push_back(box);
-        }
+        box->collisions[index] = true;
+        collisions[i] = box;
     }
 }
 
 std::vector<BoundingBox*> DS::SortedExtremaList::getCollidingBoxes(BoundingBox* box)
 {
     std::vector<BoundingBox*> collisions;
-    
+    const int start = box->storage[index].minima_chunk_index+1;
+    collisions.resize(box->storage[index].maxima_chunk_index - start);
     for (int i = box->storage[index].minima_chunk_index+1; i < box->storage[index].maxima_chunk_index; i++)
     {
-        addItemToCollisionList(box, i, collisions);
+        // if (extrema[i].box == box)
+        // {
+        //     LOG_INFO("No");
+        // }
+        addItemToCollisionList(extrema[i].box, i - start, collisions);
     }
 
     return collisions;
@@ -651,7 +667,7 @@ min_pos(0, 0, 0),
 max_pos(0, 0, 0),
 og_min_pos(0, 0, 0),
 og_max_pos(0, 0, 0),
-current_transform(),
+current_transform(-1000),
 has_display(false),
 pass(0)
 {
@@ -738,8 +754,8 @@ bool BoundingBox::updateTransform(const glm::mat4& global_transform)
 
     // Now find the new biggest and smallest
     // Start with a position in the mesh for the min and max
-    min_pos = glm::vec3(box_mesh[0].x, box_mesh[0].y, box_mesh[0].x);
-    max_pos = glm::vec3(box_mesh[0].x, box_mesh[0].y, box_mesh[0].x);
+    min_pos = glm::vec3(box_mesh[0].x, box_mesh[0].y, box_mesh[0].z);
+    max_pos = glm::vec3(box_mesh[0].x, box_mesh[0].y, box_mesh[0].z);
 
     for (int i = 0; i < 8; i++)
     {
@@ -777,6 +793,8 @@ bool BoundingBox::updateTransform(const glm::mat4& global_transform)
     {
         updateDisplay();
     }
+
+    current_transform = global_transform;
 
     // Boom. Bounding box updated
     return true;
@@ -855,6 +873,7 @@ void BoundingBox::updateDisplay()
 
     // TODO: Do this in a way that is slightly closer to resembling good
     display.removeComponent<Flux::GLRenderer::GLEntityCom>();
+    display.removeComponent<Flux::GLRenderer::GLMeshCom>();
 }
 
 // ==================================================
@@ -903,16 +922,40 @@ std::vector<BoundingBox*> BoundingWorld::getColliding(BoundingBox* box)
     // Because apparently it's faster...?
     for (auto i : collisions_x)
     {
-        set.push_back(i);
+        if (i->collisions[0] && i->collisions[1] && i->collisions[2])
+        {
+            set.push_back(i);
+
+            // Unset it
+            i->collisions[0] = false;
+            i->collisions[1] = false;
+            i->collisions[2] = false;
+        }
     }
-    for (auto i : collisions_y)
-    {
-        set.push_back(i);
-    }
-    for (auto i : collisions_z)
-    {
-        set.push_back(i);
-    }
+    // for (auto i : collisions_y)
+    // {
+    //     if (i->collisions[0] && i->collisions[1] && i->collisions[2])
+    //     {
+    //         set.push_back(i);
+
+    //         // Unset it
+    //         i->collisions[0] = false;
+    //         i->collisions[1] = false;
+    //         i->collisions[2] = false;
+    //     }
+    // }
+    // for (auto i : collisions_z)
+    // {
+    //     if (i->collisions[0] && i->collisions[1] && i->collisions[2])
+    //     {
+    //         set.push_back(i);
+
+    //         // Unset it
+    //         i->collisions[0] = false;
+    //         i->collisions[1] = false;
+    //         i->collisions[2] = false;
+    //     }
+    // }
 
     pass ++;
 
@@ -938,6 +981,7 @@ void Flux::Physics::giveBoundingBox(EntityRef entity)
     auto mesh_size = entity.getComponent<Renderer::MeshCom>()->mesh_resource->vertices_length;
 
     com->box = new BoundingBox(mesh, mesh_size);
+    com->box->entity = entity;
 
     com->setup = false;
     com->collisions = std::vector<BoundingBox* >();
@@ -959,6 +1003,7 @@ void Flux::Physics::giveBoundingBox(EntityRef entity, glm::vec3 min_pos, glm::ve
     com->box->og_max_pos = max_pos;
     com->box->min_pos = min_pos;
     com->box->max_pos = max_pos;
+    com->box->entity = entity;
 
     com->setup = false;
     com->collisions = std::vector<BoundingBox* >();
@@ -988,9 +1033,11 @@ void BroadPhaseSystem::runSystem(EntityRef entity, float delta)
         if (!bc->setup)
         {
             // LOG_INFO("=== Initial Add");
+            bc->box->updateTransform(tc->model);
             world.addBoundingBox(bc->box);
             bc->setup = true;
             bc->world = &world;
+            bc->box->entity = entity;
         }
 
         if (tc->has_changed)
@@ -1025,10 +1072,512 @@ std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef enti
         if (bc->frame != frames)
         {
             bc->collisions = bc->world->getColliding(bc->box);
+            bc->frame = frames;
         }
 
         return bc->collisions;
     }
 
     return std::vector<BoundingBox*>();
+}
+
+// ==================================================
+// Narrow Phase
+// ==================================================
+
+ConvexCollider::ConvexCollider()
+{
+
+}
+
+ConvexCollider::ConvexCollider(std::vector<glm::vec3> vertices)
+:vertices(vertices),
+og_vertices(vertices),
+transform()
+{
+
+}
+
+glm::vec3 ConvexCollider::findFurthestPoint(const glm::vec3& direction) const
+{
+    glm::vec3 max_point;
+
+    // Set max distance to the smallest possible float
+    float max_distance = -FLT_MAX;
+
+    // Find point biggest in _direction_
+    for (auto v : vertices)
+    {
+        float distance = glm::dot(v, direction);
+        if (distance > max_distance)
+        {
+            max_distance = distance;
+            max_point = v;
+        }
+    }
+
+    return max_point;
+}
+
+void ConvexCollider::updateTransform(const glm::mat4 &global_transform)
+{
+    if (global_transform != transform)
+    {
+        // This is very intensive
+        vertices = og_vertices;
+        for (int i = 0; i < vertices.size(); i++)
+        {
+            vertices[i] = glm::vec3(global_transform * glm::vec4(vertices[i], 1));
+        }
+    }
+}
+
+glm::vec3 GJK::support(const Collider* col_a, const Collider* col_b, const glm::vec3 &direction)
+{
+    return col_a->findFurthestPoint(direction) - col_b->findFurthestPoint(-direction);
+}
+
+bool GJK::nextSimplex(Simplex& points, glm::vec3& direction)
+{
+    // Use the apropriate shape
+    switch (points.size)
+    {
+        case 2: return lineSimplex(points, direction);
+        case 3: return triangleSimplex(points, direction);
+        case 4: return tetrahedronSimplex(points, direction);
+    }
+
+    // Impossible
+    return false;
+}
+
+bool sameDirection(const glm::vec3& direction, const glm::vec3& ao)
+{
+    return glm::dot(direction, ao) > 0;
+}
+
+bool GJK::lineSimplex(Simplex &points, glm::vec3 &direction)
+{
+    glm::vec3 a = points[0];
+    glm::vec3 b = points[1];
+
+    auto ab = b - a;
+    auto ao = -a;
+
+    if (sameDirection(ab, ao))
+    {
+        direction = glm::cross(glm::cross(ab, ao), ab);
+    }
+    else
+    {
+        points = {a};
+        direction = ao;
+    }
+
+    return false;
+}
+
+bool GJK::triangleSimplex(Simplex &points, glm::vec3 &direction)
+{
+    glm::vec3 a = points[0];
+    glm::vec3 b = points[1];
+    glm::vec3 c = points[2];
+
+    auto ab = b - a;
+    auto ac = c - a;
+    auto ao = -a;
+
+    auto abc = glm::cross(ab, ac);
+
+    if (sameDirection(glm::cross(abc, ac), ao))
+    {
+        if (sameDirection(ac, ao))
+        {
+            points = {a, c};
+            direction = glm::cross(glm::cross(ac, ao), ac);
+        }
+        else
+        {
+            return lineSimplex(points = {a, b}, direction);
+        }
+    }
+    else
+    {
+        if (sameDirection(glm::cross(ab, abc), ao))
+        {
+            return lineSimplex(points = {a, b}, direction);
+        }
+        else
+        {
+            if (sameDirection(abc, ao))
+            {
+                direction = abc;
+            }
+            else
+            {
+                points = {a, c, b};
+                direction = -abc;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool GJK::tetrahedronSimplex(Simplex &points, glm::vec3 &direction)
+{
+    glm::vec3 a = points[0];
+    glm::vec3 b = points[1];
+    glm::vec3 c = points[2];
+    glm::vec3 d = points[3];
+
+    auto ab = b - a;
+    auto ac = c - a;
+    auto ad = d - a;
+    auto ao = -a;
+
+    auto abc = glm::cross(ab, ac);
+    auto acd = glm::cross(ac, ad);
+    auto adb = glm::cross(ad, ab);
+
+    if (sameDirection(abc, ao))
+    {
+        return triangleSimplex(points = {a, b, c}, direction);
+    }
+
+    if (sameDirection(acd, ao))
+    {
+        return triangleSimplex(points = {a, c, d}, direction);
+    }
+
+    if (sameDirection(adb, ao))
+    {
+        return triangleSimplex(points = {a, d, b}, direction);
+    }
+
+    return true;
+}
+
+std::pair<bool, Flux::Physics::GJK::Simplex> GJK::GJK(const Collider* col_a, const Collider* col_b)
+{
+    // Start with a random direction
+    auto sup_v = support(col_a, col_b, glm::vec3(1, 0, 0));
+
+    // Start the Simplex
+    Simplex points;
+    points.addPoint(sup_v);
+
+    // New direction is towards the origin (because -x goes towards it)
+    glm::vec3 direction = -sup_v;
+
+    while (true)
+    {
+        sup_v = support(col_a, col_b, direction);
+
+        if (glm::dot(sup_v, direction) <= 0)
+        {
+            // We could not find a collision in the shape
+            return {false, points};
+        }
+
+        points.addPoint(sup_v);
+
+        if (nextSimplex(points, direction))
+        {
+            return {true, points};
+        }
+    }
+}
+
+std::pair<std::vector<glm::vec4>, uint32_t> GJK::generateNormals(std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces)
+{
+    std::vector<glm::vec4> normals;
+
+    // This variable tells us which triangle is closest
+    uint32_t min_tri = 0;
+    float min_distance = FLT_MAX;
+
+    // Iterate over each triangle
+    for (auto i = 0; i < faces.size(); i += 3)
+    {
+        // Get our vertices
+        glm::vec3 a = polytope[faces[i]];
+        glm::vec3 b = polytope[faces[i+1]];
+        glm::vec3 c = polytope[faces[i+2]];
+
+        // Generate normal
+        glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+        float distance = glm::dot(normal, a);
+
+        if (distance < 0)
+        {
+            // Our winding order is wrong; reverse
+            normal *= -1;
+            distance *= -1;
+        }
+
+        normals.emplace_back(normal, distance);
+
+        // Check if it's the closest triangle
+        if (distance < min_distance)
+        {
+            min_tri = i / 3;
+            min_distance = distance;
+        }
+    }
+
+    return {normals, min_tri};
+}
+
+void GJK::addEdge(std::vector<std::pair<uint32_t, uint32_t>>& edges, std::vector<uint32_t>& faces, int start, int end)
+{
+    // Check if they're in our list
+    auto edge = std::find(edges.begin(), edges.end(), std::make_pair(faces[end], faces[start]));
+
+    if (edge != edges.end())
+    {
+        // There's 2 of it - remove both
+        edges.erase(edge);
+    }
+    else
+    {
+        // It's unique (so far). Add it
+        edges.emplace_back(faces[start], faces[end]);
+    }
+}
+
+CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* col_b)
+{
+    // Create polytope as a "mesh"
+    std::vector<glm::vec3> polytope;
+    polytope.push_back(simplex[0]);
+    polytope.push_back(simplex[1]);
+    polytope.push_back(simplex[2]);
+    polytope.push_back(simplex[3]);
+
+    std::vector<uint32_t> faces = {
+        0, 1, 2,
+        0, 3, 1,
+        0, 2, 3,
+        1, 3, 2
+    };
+
+    auto [normals, min_face] = generateNormals(polytope, faces);
+
+    glm::vec3 min_normal;
+    float min_distance = FLT_MAX;
+    uint32_t iterations = 0;
+    while (min_distance == FLT_MAX && iterations < EPA_MAX_ITERATIONS)
+    {
+        min_normal = glm::vec3(normals[min_face]);
+        min_distance = normals[min_face].w;
+
+        // Find closest point on the actual shape
+        glm::vec3 sup_v = support(col_a, col_b, min_normal);
+        float distance = glm::dot(min_normal, sup_v);
+
+        if (abs(distance - min_distance) > 0.001f)
+        {
+            // The support point and the closest triangle aren't in the same place
+            // So we have to extend the polytope
+            min_distance = FLT_MAX;
+
+            // Tear a giant hole in the polytope
+            std::vector<std::pair<uint32_t, uint32_t>> unique_edges;
+
+            // Delete any triangles that point towards the new point
+            for (auto i = 0; i < normals.size(); i++)
+            {
+                if (sameDirection(normals[i], sup_v))
+                {
+                    // This face must be killed :(
+                    auto f = i * 3;
+
+                    // Add the unique edges
+                    addEdge(unique_edges, faces, f, f + 1);
+                    addEdge(unique_edges, faces, f + 1, f + 2);
+                    addEdge(unique_edges, faces, f + 2, f);
+
+                    faces[f+2] = faces.back(); faces.pop_back();
+                    faces[f+1] = faces.back(); faces.pop_back();
+                    faces[f] = faces.back(); faces.pop_back();
+
+                    normals[i] = normals.back(); normals.pop_back();
+
+                    i--;
+                }
+            }
+
+            // Add new faces
+            std::vector<uint32_t> new_faces;
+
+            for (auto [start, end] : unique_edges)
+            {
+                new_faces.push_back(start);
+                new_faces.push_back(end);
+                new_faces.push_back(polytope.size());
+            }
+
+            polytope.push_back(sup_v);
+
+            auto [new_normals, new_min_face] = generateNormals(polytope, new_faces);
+
+            // Find the new closest face
+            float old_min_distance = FLT_MAX;
+            uint32_t old_min_face = min_face;
+
+            // Use the old normals for performance reasons
+            for (auto i = 0; i < normals.size(); i++)
+            {
+                if (normals[i].w < old_min_distance)
+                {
+                    old_min_distance = normals[i].w;
+                    min_face = i;
+                }
+            }
+
+            // Check if the new normals are closer
+            if (new_normals[new_min_face].w < old_min_distance)
+            {
+                // new_min_face's index
+                min_face = new_min_face + normals.size();
+            }
+
+            if (old_min_face == min_face)
+            {
+                // I think this means it's done...?
+                min_normal = glm::vec3(normals[min_face]);
+                min_distance = normals[min_face].w;
+            }
+
+            // Add the new faces and normals
+            faces.insert(faces.end(), new_faces.begin(), new_faces.end());
+            normals.insert(normals.end(), new_normals.begin(), new_normals.end());
+        }
+
+        iterations ++;
+    }
+
+    return {min_normal, min_distance + 0.001f, true};
+}
+
+CollisionData GJK::getColliding(const Collider *col_a, const Collider *col_b)
+{
+    auto [hit, simplex] = GJK(col_a, col_b);
+
+    if (hit)
+    {
+        return EPA(simplex, col_a, col_b);
+    }
+
+    return {glm::vec3(), 0, false};
+}
+
+// ==================================================
+// Narrow Phase Flux Stuff
+// ==================================================
+
+void Flux::Physics::giveConvexCollider(Flux::EntityRef entity)
+{
+    if (!entity.hasComponent<Renderer::MeshCom>())
+    {
+        LOG_ERROR("Mesh required for convex collider creation");
+        return;
+    }
+    auto mc = entity.getComponent<Renderer::MeshCom>();
+    std::vector<glm::vec3> points;
+    points.resize(mc->mesh_resource->vertices_length);
+
+    for (auto i = 0 ; i < mc->mesh_resource->vertices_length; i++)
+    {
+        points[i] = glm::vec3(mc->mesh_resource->vertices[i].x, mc->mesh_resource->vertices[i].y, mc->mesh_resource->vertices[i].z);
+    }
+
+    auto convc = new ConvexCollider(points);
+
+    auto cc = new ColliderCom;
+    cc->collider = convc;
+    entity.addComponent(cc);
+}
+
+// TODO: Move collision detection out of a system,
+// only run it on object that specifically ask for it
+// because it's expensive af
+void NarrowPhaseSystem::runSystem(EntityRef entity, float delta)
+{
+    if (!entity.hasComponent<BoundingCom>() || !entity.hasComponent<ColliderCom>())
+    {
+        return;
+    }
+
+    auto bc = entity.getComponent<BoundingCom>();
+    auto tc = entity.getComponent<Transform::TransformCom>();
+
+    bc->collisions = getBoundingBoxCollisions(entity);
+
+    if (bc->collisions.size() < 1 && !tc->has_changed)
+    {
+        // No collisions
+        // LOG_INFO("No collisions");
+        
+        return;
+    }
+
+    auto cc = entity.getComponent<ColliderCom>();
+
+    bool recalculate = tc->has_changed;
+    for (auto i : bc->collisions)
+    {
+        if (i->entity.getEntityID() != -1)
+        {
+            if (i->entity.hasComponent<ColliderCom>())
+            {
+                auto etc = i->entity.getComponent<Transform::TransformCom>();
+                if (etc->has_changed == true)
+                {
+                    recalculate = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (recalculate)
+    {
+        // Process all the collisions :(
+        auto collisions = std::vector<Collision>();
+        cc->collider->updateTransform(tc->model);
+
+        int c = 0;
+        for (auto i : bc->collisions)
+        {
+            if (i->entity.getEntityID() != -1)
+            {
+                if (!i->entity.hasComponent<ColliderCom>())
+                {
+                    // Don't add it
+                }
+                else
+                {
+                    // Actually calculate the collision
+                    // Step 1: update collider's transform
+                    auto ecc = i->entity.getComponent<ColliderCom>();
+                    auto etc = i->entity.getComponent<Transform::TransformCom>();
+                    ecc->collider->updateTransform(etc->model);
+
+                    // Step 2: GJK
+                    auto colliding = GJK::getColliding(cc->collider, ecc->collider);
+
+                    // Step 3: Profit, or don't profit
+                    if (colliding.colliding)
+                    {
+                        collisions.push_back({colliding.normal, colliding.depth, colliding.colliding, i->entity});
+                    }
+                }
+            }
+            c++;
+        }
+
+        cc->collisions = collisions;
+    }
 }

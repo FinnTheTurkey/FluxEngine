@@ -4,10 +4,15 @@
 #include "Flux/ECS.hh"
 #include "Flux/Flux.hh"
 #include "Flux/Renderer.hh"
+#include "glm/detail/type_vec.hpp"
+#include <algorithm>
+#include <array>
 #include <forward_list>
+#include <initializer_list>
 #include <unordered_set>
 
 #define FLUX_SIL_CHUNK_SIZE 8
+#define EPA_MAX_ITERATIONS 64
 
 /**
 References:
@@ -212,7 +217,7 @@ namespace DS
         max_pos(0, 0, 0),
         og_min_pos(0, 0, 0),
         og_max_pos(0, 0, 0),
-        current_transform(),
+        current_transform(-1000),
         has_display(false),
         pass(0) {};
         BoundingBox(Renderer::Vertex* mesh, uint32_t size);
@@ -238,6 +243,8 @@ namespace DS
         // Info for collision detection
         uint64_t pass;
         bool collisions[3];
+
+        EntityRef entity;
 
     private:
         bool has_display;
@@ -296,6 +303,16 @@ namespace DS
     {
         FLUX_COMPONENT(BoundingCom, BoundingCom);
 
+        ~BoundingCom()
+        {
+            // Remove bounding boxes from bounding world
+            if (world && box)
+            {
+                // TODO: IMPORTANT: Fix
+                // world->removeBoundingBox(box);
+            }
+        }
+
         bool serialize(Resources::Serializer *serializer, FluxArc::BinaryFile *output) override
         {
             output->set(box->og_min_pos.x);
@@ -325,6 +342,9 @@ namespace DS
             file->get(&box->og_max_pos.x);
             file->get(&box->og_max_pos.y);
             file->get(&box->og_max_pos.z);
+
+            box->max_pos = box->og_max_pos;
+            box->min_pos = box->og_min_pos;
 
             setup = false;
             collisions = std::vector<BoundingBox* >();
@@ -361,6 +381,142 @@ namespace DS
         void onSystemStart() override;
         void runSystem(EntityRef entity, float delta) override;
         void onSystemEnd() override;
+    };
+
+    // ====================================
+    // Narrow Phase
+    // ====================================
+
+    // Thanks to https://blog.winter.dev/2020/gjk-algorithm/ for explaining this well
+    // You may notice my code is very similar to their code
+
+    // Use polymorphism because, for once, it's the best tool for the job
+    class Collider
+    {
+    public:
+        virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) const {return glm::vec3();};
+        virtual void updateTransform(const glm::mat4& global_transform) {};
+    };
+    
+    // TODO: Change transform of colliders
+    class ConvexCollider: public Collider
+    {
+    private:
+        std::vector<glm::vec3> og_vertices;
+        std::vector<glm::vec3> vertices;
+        glm::mat4 transform;
+    public:
+        ConvexCollider();
+        ConvexCollider(std::vector<glm::vec3> vertices);
+        glm::vec3 findFurthestPoint(const glm::vec3& direction) const override;
+
+        void updateTransform(const glm::mat4& global_transform) override;
+    };
+
+    struct CollisionData
+    {
+        glm::vec3 normal;
+        float depth;
+        bool colliding;
+    };
+
+    struct Collision
+    {
+        glm::vec3 normal;
+        float depth;
+        bool colliding;
+        Flux::EntityRef entity;
+    };
+
+// Seperate namespace to keep non-user facing GJK away
+namespace GJK
+{
+    glm::vec3 support(const Collider* col_a, const Collider* col_b, const glm::vec3& direction);
+
+    class Simplex
+    {
+    private:
+        std::array<glm::vec3, 4> points;
+
+    public:
+        unsigned int size;
+
+        Simplex()
+        : points {glm::vec3(), glm::vec3(), glm::vec3(), glm::vec3()},
+        size(0)
+        {}
+
+        Simplex& operator=(std::initializer_list<glm::vec3> list)
+        {
+            for (auto v = list.begin(); v != list.end(); v++)
+            {
+                points[std::distance(list.begin(), v)] = *v;
+            }
+            size = list.size();
+
+            return *this;
+        }
+        
+        glm::vec3& operator[] (unsigned int i)
+        {
+            return points[i];
+        }
+
+        void addPoint(const glm::vec3& point)
+        {
+            points = {point, points[0], points[1], points[2]};
+            size = std::min(size + 1, 4u);
+        }
+    };
+
+    /**
+    The smart part: Detecting if the simplex is over the origin, 
+    and if not, make it closer
+    */
+    bool nextSimplex(Simplex& points, glm::vec3& direction);
+
+    /** Now the smart bits for different simplex shapes */
+    bool lineSimplex(Simplex& points, glm::vec3& direction);
+    bool triangleSimplex(Simplex& points, glm::vec3& direction);
+    bool tetrahedronSimplex(Simplex& points, glm::vec3& direction);
+
+    /** Helper functions for EPA */
+    std::pair<std::vector<glm::vec4>, uint32_t> generateNormals(std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces);
+
+    void addEdge(std::vector<std::pair<uint32_t, uint32_t>>& edges, std::vector<uint32_t>& faces, int start, int end);
+
+    // The actual collision detection. Uses GJK and returns true if colliding, or false if not
+    std::pair<bool, Simplex> GJK(const Collider* col_a, const Collider* col_b);
+
+    // Gets the useful information from the actual collision detection
+    CollisionData EPA(Simplex simplex, const Collider* col_a, const Collider* col_b);
+
+    /** Deals with all the algorithms. Tells you if there's a collision, and if so, how deep  */
+    CollisionData getColliding(const Collider* col_a, const Collider* col_b);
+}
+
+    void giveConvexCollider(Flux::EntityRef entity);
+
+    struct ColliderCom: public Flux::Component
+    {
+        FLUX_COMPONENT(ColliderCom, ColiderCom);
+
+        Collider* collider;
+
+        std::vector<Collision> collisions;
+    };
+
+    class NarrowPhaseSystem: public Flux::System
+    {
+    private:
+
+    public:
+        NarrowPhaseSystem() {};
+
+        void onSystemAdded(ECSCtx* ctx) override {};
+        void onSystemStart() override {};
+        void runSystem(EntityRef entity, float delta) override;
+        void onSystemEnd() override {};
     };
 
 }}

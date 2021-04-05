@@ -105,6 +105,7 @@ lights(new Renderer::LightSystem)
 
 void GLRendererSystem::onSystemAdded(ECSCtx *ctx)
 {
+    ctx->addSystemFront(new Flux::Physics::NarrowPhaseSystem);
     ctx->addSystemFront(lights);
     ctx->addSystemFront(new Flux::Physics::BroadPhaseSystem);
     ctx->addSystemBack(new Flux::Transform::EndFrameSystem);
@@ -384,7 +385,7 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Ren
                     glBufferSubData(GL_UNIFORM_BUFFER, uni->offset[count-tex_id], sizeof(float) * 3, glm::value_ptr(*(glm::vec3*)item.second.value));
                     index += sizeof(float)*4;
                     // index += sizeof(float)*3;
-                    LOG_ASSERT_MESSAGE(glGetError() == GL_INVALID_VALUE, "Something broke");
+                    LOG_ASSERT_MESSAGE(glGetError() != GL_NO_ERROR, "Something broke");
                     break;
                 }
                 case (Flux::Renderer::UniformType::Vector4):
@@ -427,7 +428,7 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Ren
 
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        std::cout << uni->textures.size() << "\n";
+        // std::cout << uni->textures.size() << "\n";
 
         const GLenum err = glGetError();
         if (GL_NO_ERROR != err)
@@ -456,6 +457,9 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Ren
         // {
         //     processTexture(mat_res->diffuse_texture);
         // }
+
+        glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, uni->handle);
     }
     else
     {
@@ -486,9 +490,9 @@ void GLRendererSystem::dealWithUniforms(Flux::Renderer::MeshCom* mesh, Flux::Ren
             glUniform1i(uni->textures[i].location, i);
         }
         
+        glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, uni->handle);
         // glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
-        glBindBuffer(GL_UNIFORM_BUFFER, uni->handle);
     }
 }
 
@@ -711,6 +715,12 @@ void GLRendererSystem::runSystem(Flux::EntityRef entity, float delta)
 
     // Actually render
     GLMeshCom* mesh_com = mesh->mesh_resource.getBaseEntity().getComponent<GLMeshCom>();
+    if (mesh_com->num_indices == 0)
+    {
+        // Nevermind
+        return;
+    }
+
     GLShaderCom* shader_com = mat_res->shaders.getBaseEntity().getComponent<GLShaderCom>();
 
     glUseProgram(shader_com->shader_program);
