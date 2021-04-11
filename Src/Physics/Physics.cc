@@ -1,4 +1,5 @@
 #include "Flux/Physics.hh"
+#include "Flux/Debug.hh"
 #include "Flux/Log.hh"
 #include "Flux/Renderer.hh"
 #include "Flux/Resources.hh"
@@ -6,6 +7,7 @@
 // TODO: Remove ASAP
 #include "Flux/OpenGL/GLRenderer.hh"
 #include "glm/detail/func_geometric.hpp"
+#include "glm/detail/type_vec.hpp"
 #include <algorithm>
 #include <cfloat>
 
@@ -643,6 +645,9 @@ void DS::SortedExtremaList::addItemToCollisionList(BoundingBox* box, int i, std:
 
 std::vector<BoundingBox*> DS::SortedExtremaList::getCollidingBoxes(BoundingBox* box)
 {
+    // TODO: Deal with this better
+    // if (!started) return std::vector<BoundingBox*>();
+
     std::vector<BoundingBox*> collisions;
     const int start = box->storage[index].minima_chunk_index+1;
     collisions.resize(box->storage[index].maxima_chunk_index - start);
@@ -909,6 +914,10 @@ void BoundingWorld::processCollisions(float delta)
     x_axis.sort();
     y_axis.sort();
     z_axis.sort();
+
+    // x_axis.started = true;
+    // y_axis.started = true;
+    // z_axis.started = true;
 }
 
 std::vector<BoundingBox*> BoundingWorld::getColliding(BoundingBox* box)
@@ -1069,6 +1078,11 @@ std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef enti
     if (entity.hasComponent<BoundingCom>())
     {
         auto bc = entity.getComponent<BoundingCom>();
+        if (!bc->setup)
+        {
+            return std::vector<BoundingBox*>();
+        }
+
         if (bc->frame != frames)
         {
             bc->collisions = bc->world->getColliding(bc->box);
@@ -1289,15 +1303,190 @@ std::pair<bool, Flux::Physics::GJK::Simplex> GJK::GJK(const Collider* col_a, con
     }
 }
 
-std::pair<std::vector<glm::vec4>, uint32_t> GJK::generateNormals(std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces)
+// std::pair<std::vector<glm::vec4>, uint32_t> GJK::generateNormals(std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces)
+// {
+//     std::vector<glm::vec4> normals;
+
+//     // This variable tells us which triangle is closest
+//     uint32_t min_tri = 0;
+//     float min_distance = FLT_MAX;
+
+//     // Iterate over each triangle
+//     for (auto i = 0; i < faces.size(); i += 3)
+//     {
+//         // Get our vertices
+//         glm::vec3 a = polytope[faces[i]];
+//         glm::vec3 b = polytope[faces[i+1]];
+//         glm::vec3 c = polytope[faces[i+2]];
+
+//         // Generate normal
+//         glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+//         float distance = glm::dot(normal, a - glm::vec3(0, 0, 0)) * -1;
+//         // float distance = glm::dot(normal, glm::vec3(0, 0, 0));
+
+//         if (distance < 0)
+//         {
+//             // Our winding order is wrong; reverse
+//             normal *= -1;
+//             distance *= -1;
+//         }
+
+//         normals.emplace_back(normal, distance);
+
+//         // Check if it's the closest triangle
+//         if (distance < min_distance)
+//         {
+//             min_tri = i / 3;
+//             min_distance = distance;
+//         }
+//     }
+
+//     return {normals, min_tri};
+// }
+
+// void GJK::addEdge(std::vector<std::pair<uint32_t, uint32_t>>& edges, std::vector<uint32_t>& faces, int start, int end)
+// {
+//     // Check if they're in our list
+//     auto edge = std::find(edges.begin(), edges.end(), std::make_pair(faces[end], faces[start]));
+
+//     if (edge != edges.end())
+//     {
+//         // There's 2 of it - remove both
+//         edges.erase(edge);
+//     }
+//     else
+//     {
+//         // It's unique (so far). Add it
+//         edges.emplace_back(faces[start], faces[end]);
+//     }
+// }
+
+// CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* col_b)
+// {
+//     // Create polytope as a "mesh"
+//     std::vector<glm::vec3> polytope;
+//     polytope.push_back(simplex[0]);
+//     polytope.push_back(simplex[1]);
+//     polytope.push_back(simplex[2]);
+//     polytope.push_back(simplex[3]);
+
+//     std::vector<uint32_t> faces = {
+//         0, 1, 2,
+//         0, 3, 1,
+//         0, 2, 3,
+//         1, 3, 2
+//     };
+
+//     auto [normals, min_face] = generateNormals(polytope, faces);
+
+//     glm::vec3 min_normal;
+//     float min_distance = FLT_MAX;
+//     uint32_t iterations = 0;
+//     while (min_distance == FLT_MAX && iterations < EPA_MAX_ITERATIONS)
+//     {
+//         min_normal = glm::vec3(normals[min_face]);
+//         min_distance = normals[min_face].w;
+
+//         // Find closest point on the actual shape
+//         glm::vec3 sup_v = support(col_a, col_b, min_normal);
+//         float distance = glm::dot(min_normal, sup_v - glm::vec3(0, 0, 0));
+
+//         if (abs(distance) - abs(min_distance) > 0.005f)
+//         {
+//             // The support point and the closest triangle aren't in the same place
+//             // So we have to extend the polytope
+//             min_distance = FLT_MAX;
+
+//             // Tear a giant hole in the polytope
+//             std::vector<std::pair<uint32_t, uint32_t>> unique_edges;
+
+//             // Delete any triangles that point towards the new point
+//             for (auto i = 0; i < normals.size(); i++)
+//             {
+//                 if (sameDirection(normals[i], sup_v))
+//                 {
+//                     // This face must be killed :(
+//                     auto f = i * 3;
+
+//                     // Add the unique edges
+//                     addEdge(unique_edges, faces, f, f + 1);
+//                     addEdge(unique_edges, faces, f + 1, f + 2);
+//                     addEdge(unique_edges, faces, f + 2, f);
+
+//                     faces[f+2] = faces.back(); faces.pop_back();
+//                     faces[f+1] = faces.back(); faces.pop_back();
+//                     faces[f] = faces.back(); faces.pop_back();
+
+//                     normals[i] = normals.back(); normals.pop_back();
+
+//                     i--;
+//                 }
+//             }
+
+//             // Add new faces
+//             std::vector<uint32_t> new_faces;
+
+//             for (auto [start, end] : unique_edges)
+//             {
+//                 new_faces.push_back(start);
+//                 new_faces.push_back(end);
+//                 new_faces.push_back(polytope.size());
+//             }
+
+//             polytope.push_back(sup_v);
+
+//             auto [new_normals, new_min_face] = generateNormals(polytope, new_faces);
+
+//             // Find the new closest face
+//             float old_min_distance = FLT_MAX;
+//             uint32_t old_min_face = min_face;
+
+//             // Use the old normals for performance reasons
+//             for (auto i = 0; i < normals.size(); i++)
+//             {
+//                 if (normals[i].w < old_min_distance)
+//                 {
+//                     old_min_distance = normals[i].w;
+//                     min_face = i;
+//                 }
+//             }
+
+//             // Check if the new normals are closer
+//             if (new_normals[new_min_face].w < old_min_distance)
+//             {
+//                 // new_min_face's index
+//                 min_face = new_min_face + normals.size();
+//             }
+
+//             // if (old_min_face == min_face)
+//             // {
+//             //     // I think this means it's done...?
+//             //     min_normal = glm::vec3(normals[min_face]);
+//             //     min_distance = normals[min_face].w;
+//             // }
+
+//             // Add the new faces and normals
+//             faces.insert(faces.end(), new_faces.begin(), new_faces.end());
+//             normals.insert(normals.end(), new_normals.begin(), new_normals.end());
+//         }
+
+//         iterations ++;
+//     }
+
+//     if (iterations == EPA_MAX_ITERATIONS)
+//     {
+//         LOG_WARN("Hit max its");
+//     }
+
+//     return {min_normal, min_distance + 0.001f, true};
+// }
+
+uint32_t GJK::getClosestTri(std::vector<glm::vec4> &normals, std::vector<glm::vec3> &polytope, std::vector<uint32_t> &faces)
 {
-    std::vector<glm::vec4> normals;
+    uint32_t closest = 0;
+    float closest_distance = FLT_MAX;
 
-    // This variable tells us which triangle is closest
-    uint32_t min_tri = 0;
-    float min_distance = FLT_MAX;
-
-    // Iterate over each triangle
+    normals.resize(faces.size() / 3);
     for (auto i = 0; i < faces.size(); i += 3)
     {
         // Get our vertices
@@ -1307,47 +1496,32 @@ std::pair<std::vector<glm::vec4>, uint32_t> GJK::generateNormals(std::vector<glm
 
         // Generate normal
         glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
-        float distance = glm::dot(normal, a);
 
-        if (distance < 0)
+        // Find distance to origin using plane to point
+        auto v = a - glm::vec3(0, 0, 0);
+        auto dist = glm::dot(v, normal);
+
+        normals[i/3] = glm::vec4(normal, glm::abs(dist));
+
+        if (dist == 0)
         {
-            // Our winding order is wrong; reverse
-            normal *= -1;
-            distance *= -1;
+            // Something must've went wrong. Just throw out this normal
+            // continue;
         }
 
-        normals.emplace_back(normal, distance);
-
-        // Check if it's the closest triangle
-        if (distance < min_distance)
+        if (dist < closest_distance)
         {
-            min_tri = i / 3;
-            min_distance = distance;
+            closest_distance = dist;
+            closest = i/3;
         }
     }
 
-    return {normals, min_tri};
-}
-
-void GJK::addEdge(std::vector<std::pair<uint32_t, uint32_t>>& edges, std::vector<uint32_t>& faces, int start, int end)
-{
-    // Check if they're in our list
-    auto edge = std::find(edges.begin(), edges.end(), std::make_pair(faces[end], faces[start]));
-
-    if (edge != edges.end())
-    {
-        // There's 2 of it - remove both
-        edges.erase(edge);
-    }
-    else
-    {
-        // It's unique (so far). Add it
-        edges.emplace_back(faces[start], faces[end]);
-    }
+    return closest;
 }
 
 CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* col_b)
 {
+    bool done = false;
     // Create polytope as a "mesh"
     std::vector<glm::vec3> polytope;
     polytope.push_back(simplex[0]);
@@ -1362,103 +1536,113 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
         1, 3, 2
     };
 
-    auto [normals, min_face] = generateNormals(polytope, faces);
+    std::vector<glm::vec4> normals;
+    int adds = 0, removes = 0;
 
-    glm::vec3 min_normal;
-    float min_distance = FLT_MAX;
-    uint32_t iterations = 0;
-    while (min_distance == FLT_MAX && iterations < EPA_MAX_ITERATIONS)
+    int iteration_count = 0;
+
+    while (!done)
     {
-        min_normal = glm::vec3(normals[min_face]);
-        min_distance = normals[min_face].w;
+        normals = std::vector<glm::vec4>();
+        uint32_t closest_tri = getClosestTri(normals, polytope, faces);
 
-        // Find closest point on the actual shape
-        glm::vec3 sup_v = support(col_a, col_b, min_normal);
-        float distance = glm::dot(min_normal, sup_v);
+        auto distance = normals[closest_tri].w;
+        auto sup_v = support(col_a, col_b, glm::vec3(normals[closest_tri]));
+        auto sup_dist = glm::dot(sup_v - glm::vec3(0, 0, 0), glm::vec3(normals[closest_tri]));
 
-        if (abs(distance - min_distance) > 0.001f)
+        if (sup_dist - distance > 0.01f)
         {
-            // The support point and the closest triangle aren't in the same place
-            // So we have to extend the polytope
-            min_distance = FLT_MAX;
-
-            // Tear a giant hole in the polytope
-            std::vector<std::pair<uint32_t, uint32_t>> unique_edges;
-
-            // Delete any triangles that point towards the new point
-            for (auto i = 0; i < normals.size(); i++)
+            // Extend the polytope
+            std::vector<std::pair<uint32_t, uint32_t>> edges;
+            for (int i = 0; i < normals.size(); i++)
             {
-                if (sameDirection(normals[i], sup_v))
+                // if (glm::dot(glm::vec3(normals[i]), sup_v) > 0)
+                if (glm::dot(glm::vec3(normals[i]), sup_v - polytope[faces[i*3]]) > 0)
                 {
-                    // This face must be killed :(
-                    auto f = i * 3;
+                    // Store it's edges for later
+                    uint32_t v1 = faces[i*3];
+                    uint32_t v2 = faces[i*3+1];
+                    uint32_t v3 = faces[i*3+2];
 
-                    // Add the unique edges
-                    addEdge(unique_edges, faces, f, f + 1);
-                    addEdge(unique_edges, faces, f + 1, f + 2);
-                    addEdge(unique_edges, faces, f + 2, f);
+                    // Remove all traces the face ever existed
+                    faces.erase(faces.begin() + i*3+2);
+                    faces.erase(faces.begin() + i*3+1);
+                    faces.erase(faces.begin() + i*3);
+                    removes ++;
+                    
+                    // Remove it's normal, and correct the if loop's iterations
+                    normals.erase(normals.begin() + i);
+                    i --; // So that next loop iteration has the same index as this one
 
-                    faces[f+2] = faces.back(); faces.pop_back();
-                    faces[f+1] = faces.back(); faces.pop_back();
-                    faces[f] = faces.back(); faces.pop_back();
-
-                    normals[i] = normals.back(); normals.pop_back();
-
-                    i--;
+                    std::vector<std::pair<uint32_t, uint32_t>> face_edges = {{v1, v2}, {v2, v3}, {v3, v1}};
+                    // std::vector<std::pair<uint32_t, uint32_t>> face_edges = {{v2, v1}, {v3, v2}, {v1, v3}};
+                    for (auto e : face_edges)
+                    {
+                        auto ed = std::find(edges.begin(), edges.end(), std::pair<uint32_t, uint32_t>(e.second, e.first));
+                        if (ed != edges.end())
+                        {
+                            edges.erase(ed);
+                        }
+                        else
+                        {
+                            edges.push_back(e);
+                        }
+                    }
                 }
             }
 
-            // Add new faces
-            std::vector<uint32_t> new_faces;
-
-            for (auto [start, end] : unique_edges)
-            {
-                new_faces.push_back(start);
-                new_faces.push_back(end);
-                new_faces.push_back(polytope.size());
-            }
-
+            // Add supv
+            // We don't have to worry about removing points
+            // because if they're not referenced in indices,
+            // it's like they don't exist.
+            // And we're using a vector so they'll get freed automatically
+            uint32_t new_index = polytope.size();
             polytope.push_back(sup_v);
 
-            auto [new_normals, new_min_face] = generateNormals(polytope, new_faces);
-
-            // Find the new closest face
-            float old_min_distance = FLT_MAX;
-            uint32_t old_min_face = min_face;
-
-            // Use the old normals for performance reasons
-            for (auto i = 0; i < normals.size(); i++)
+            // Add new triangles
+            for (auto i : edges)
             {
-                if (normals[i].w < old_min_distance)
-                {
-                    old_min_distance = normals[i].w;
-                    min_face = i;
-                }
+                faces.push_back(i.first);
+                faces.push_back(i.second);
+                faces.push_back(new_index);
+                adds ++;
             }
+        }
+        else
+        {
+            done = true;
+            // Render debug shape
+            // std::vector<Renderer::Vertex> vtx(polytope.size());
+            // for (int i = 0; i < polytope.size(); i++)
+            // {
+            //     vtx[i] = Renderer::Vertex {polytope[i].x, polytope[i].y + 5, polytope[i].z};
+            //     // Debug::drawPoint(polytope[i] + glm::vec3(0, 5, 0), 0.1, Debug::Blue);
+            // }
 
-            // Check if the new normals are closer
-            if (new_normals[new_min_face].w < old_min_distance)
-            {
-                // new_min_face's index
-                min_face = new_min_face + normals.size();
-            }
+            // Debug::drawMesh(vtx, faces, Debug::Green, true);
 
-            if (old_min_face == min_face)
-            {
-                // I think this means it's done...?
-                min_normal = glm::vec3(normals[min_face]);
-                min_distance = normals[min_face].w;
-            }
-
-            // Add the new faces and normals
-            faces.insert(faces.end(), new_faces.begin(), new_faces.end());
-            normals.insert(normals.end(), new_normals.begin(), new_normals.end());
+            // Multiply normal by -1, because for some reason it's reversed
+            return CollisionData {glm::vec3(normals[closest_tri]) * glm::vec3(-1), distance, true};
         }
 
-        iterations ++;
+        iteration_count ++;
+        if (iteration_count > 64)
+        {
+            done = true;
+        }
     }
 
-    return {min_normal, min_distance + 0.001f, true};
+    // Render debug shape
+    // std::vector<Renderer::Vertex> vtx(polytope.size());
+    // for (int i = 0; i < polytope.size(); i++)
+    // {
+    //     vtx[i] = Renderer::Vertex {polytope[i].x, polytope[i].y + 5, polytope[i].z};
+    //     // Debug::drawPoint(polytope[i] + glm::vec3(0, 5, 0), 0.1, Debug::Blue);
+    // }
+
+    // Debug::drawMesh(vtx, faces, Debug::Red, true);
+
+    return CollisionData {glm::vec3(), 0, false};
 }
 
 CollisionData GJK::getColliding(const Collider *col_a, const Collider *col_b)
@@ -1486,17 +1670,23 @@ void Flux::Physics::giveConvexCollider(Flux::EntityRef entity)
     }
     auto mc = entity.getComponent<Renderer::MeshCom>();
     std::vector<glm::vec3> points;
-    points.resize(mc->mesh_resource->vertices_length);
+    // points.resize(mc->mesh_resource->vertices_length);
 
     for (auto i = 0 ; i < mc->mesh_resource->vertices_length; i++)
     {
-        points[i] = glm::vec3(mc->mesh_resource->vertices[i].x, mc->mesh_resource->vertices[i].y, mc->mesh_resource->vertices[i].z);
+        auto new_point = glm::vec3(mc->mesh_resource->vertices[i].x, mc->mesh_resource->vertices[i].y, mc->mesh_resource->vertices[i].z);
+        if (std::find(points.begin(), points.end(), new_point) == points.end())
+        {
+            // points[i] = new_point;
+            points.push_back(new_point);
+        }
     }
 
     auto convc = new ConvexCollider(points);
 
     auto cc = new ColliderCom;
     cc->collider = convc;
+    cc->frame = 0;
     entity.addComponent(cc);
 }
 
@@ -1505,9 +1695,14 @@ void Flux::Physics::giveConvexCollider(Flux::EntityRef entity)
 // because it's expensive af
 void NarrowPhaseSystem::runSystem(EntityRef entity, float delta)
 {
+    
+}
+
+std::vector<Collision> Flux::Physics::getCollisions(EntityRef entity)
+{
     if (!entity.hasComponent<BoundingCom>() || !entity.hasComponent<ColliderCom>())
     {
-        return;
+        return std::vector<Collision>();
     }
 
     auto bc = entity.getComponent<BoundingCom>();
@@ -1520,10 +1715,15 @@ void NarrowPhaseSystem::runSystem(EntityRef entity, float delta)
         // No collisions
         // LOG_INFO("No collisions");
         
-        return;
+        return std::vector<Collision>();
     }
 
     auto cc = entity.getComponent<ColliderCom>();
+
+    if (cc->frame == frames)
+    {
+        return cc->collisions;
+    }
 
     bool recalculate = tc->has_changed;
     for (auto i : bc->collisions)
@@ -1579,5 +1779,28 @@ void NarrowPhaseSystem::runSystem(EntityRef entity, float delta)
         }
 
         cc->collisions = collisions;
+        cc->frame = frames;
+        return cc->collisions;
     }
+    else
+    {
+        return cc->collisions;
+    }
+}
+
+std::vector<Collision> Flux::Physics::move(EntityRef entity, const glm::vec3 &position)
+{
+    // Translate it initially
+    Flux::Transform::translate(entity, position);
+
+    // Check for collisions
+    auto collisions = getCollisions(entity);
+
+    // "Solve" collisions
+    for (auto i : collisions)
+    {
+        Flux::Transform::translate(entity, i.normal * i.depth);
+    }
+
+    return collisions;
 }

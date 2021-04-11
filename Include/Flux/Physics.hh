@@ -201,6 +201,8 @@ namespace DS
 
         /** Get all other boxes colliding with this box. */
         std::vector<BoundingBox*> getCollidingBoxes(BoundingBox* box);
+
+        // bool started = false;
     private:
         void addItemToCollisionList(BoundingBox* box, int i, std::vector<BoundingBox*>& collisions);
 
@@ -488,6 +490,9 @@ namespace GJK
     // The actual collision detection. Uses GJK and returns true if colliding, or false if not
     std::pair<bool, Simplex> GJK(const Collider* col_a, const Collider* col_b);
 
+    /** Better helper functions for EPA */
+    uint32_t getClosestTri(std::vector<glm::vec4>& normals, std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces);
+
     // Gets the useful information from the actual collision detection
     CollisionData EPA(Simplex simplex, const Collider* col_a, const Collider* col_b);
 
@@ -504,6 +509,7 @@ namespace GJK
         Collider* collider;
 
         std::vector<Collision> collisions;
+        uint64_t frame;
     };
 
     class NarrowPhaseSystem: public Flux::System
@@ -518,6 +524,17 @@ namespace GJK
         void runSystem(EntityRef entity, float delta) override;
         void onSystemEnd() override {};
     };
+
+    /** Returns collision data about each collision involving this entity */
+    std::vector<Collision> getCollisions(EntityRef entity);
+
+    /**
+    Basic movement method.
+    This will move the entity using the given vector, in the same way
+    Transform::translate does. But if it hits a wall, it will exit
+    the wall.
+    */
+    std::vector<Collision> move(EntityRef entity, const glm::vec3& position);
 
 }}
 

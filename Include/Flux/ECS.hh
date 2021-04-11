@@ -138,6 +138,13 @@ namespace Flux
         */
         Entity* entities[FLUX_MAX_ENTITIES];
 
+        /**
+        Vector of entities that actually exist.
+        All of these are guarenteed to exist, so a nullptr check is not 
+        nessesary.
+        */
+        std::vector<uint32_t> living_entities;
+
         /* ID to be used for the next Entity if the reuse queue is empty*/
         int current_id;
 

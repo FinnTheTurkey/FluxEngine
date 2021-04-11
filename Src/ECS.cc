@@ -13,7 +13,8 @@
 
 using namespace Flux;
 
-Flux::ECSCtx::ECSCtx()
+Flux::ECSCtx::ECSCtx():
+living_entities()
 {
 
     // Clean out entities
@@ -108,6 +109,9 @@ EntityRef Flux::ECSCtx::createEntity()
     // Now add reference to ctx
     entities[entity_id] = entity;
 
+    // Add to the living list
+    living_entities.push_back(entity_id);
+
     return EntityRef(this, entity_id);
 }
 
@@ -174,6 +178,9 @@ bool Flux::ECSCtx::destroyEntity(EntityRef entity)
 
     // Remove from ctx
     entities[entity.getEntityID()] = nullptr;
+
+    // Remove from living entities
+    living_entities.erase(std::find(living_entities.begin(), living_entities.end(), entity.getEntityID()));
 
     // Add to reuse pile
     reuse.push(entity.getEntityID());
@@ -371,12 +378,16 @@ void Flux::ECSCtx::runSystem(SystemID sys, float delta, bool run_queue)
     else
     {
         systems[sys].sys->onSystemStart();
-        for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
+        // for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
+        // {
+        //     if (entities[i] != nullptr)
+        //     {
+        //         systems[sys].sys->runSystem(EntityRef(this, i), delta);
+        //     }
+        // }
+        for (int i = 0; i < living_entities.size(); i++)
         {
-            if (entities[i] != nullptr)
-            {
-                systems[sys].sys->runSystem(EntityRef(this, i), delta);
-            }
+            systems[sys].sys->runSystem(EntityRef(this, living_entities[i]), delta);
         }
         systems[sys].sys->onSystemEnd();
     }

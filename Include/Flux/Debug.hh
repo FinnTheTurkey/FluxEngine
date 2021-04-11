@@ -19,7 +19,7 @@ namespace Flux { namespace Debug
 
     void drawMesh(std::vector<Renderer::Vertex> vertices, std::vector<uint32_t> indices, Colors color, bool wireframe=false);
 
-    void drawSphere(const glm::vec3& pos, float radius, Colors color, bool wireframe=false, int lat_lines = 10, int lon_lines = 10);
+    void drawLine(glm::vec3 start, glm::vec3 end, Colors color);
 
     void drawPoint(const glm::vec3& pos, float radius, Colors color, bool wireframe=false);
 }}

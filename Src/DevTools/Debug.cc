@@ -101,7 +101,24 @@ void Flux::Debug::run(float delta)
 
 void Flux::Debug::drawMesh(std::vector<Renderer::Vertex> vertices, std::vector<uint32_t> indices, Colors color, bool wireframe)
 {
-    // TODO: Wireframe-atisation
+    if (wireframe)
+    {
+        // We're about to shake up all the indices
+        std::vector<uint32_t> new_indices;
+        new_indices.resize(indices.size() * 2);
+
+        for (int i = 0, ni = 0; i < indices.size(); i += 3, ni += 6)
+        {
+            new_indices[ni] = indices[i];
+            new_indices[ni+1] = indices[i+1];
+            new_indices[ni+2] = indices[i+1];
+            new_indices[ni+3] = indices[i+2];
+            new_indices[ni+4] = indices[i+2];
+            new_indices[ni+5] = indices[i+3];
+        }
+
+        indices = new_indices;
+    }
     
     Flux::Renderer::MeshRes* mesh_res;
 
@@ -160,23 +177,14 @@ void Flux::Debug::drawMesh(std::vector<Renderer::Vertex> vertices, std::vector<u
     }
 }
 
-void Flux::Debug::drawSphere(const glm::vec3 &pos, float radius, Colors color, bool wireframe, int lat_lines, int lon_lines)
+void Flux::Debug::drawLine(glm::vec3 start, glm::vec3 end, Colors color)
 {
-    std::vector<Renderer::Vertex> points;
-    points.resize(lat_lines * lon_lines);
+    std::vector<Renderer::Vertex> v {Renderer::Vertex {start.x, start.y, start.z}, Renderer::Vertex {end.x, end.y, end.z, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                     Renderer::Vertex {end.x, end.y, end.z, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
 
-    for (int m = 0; m < lat_lines; m++)
-    {
-        for (int n = 0; n < lon_lines; n++)
-        {
-            points[m+n] = Renderer::Vertex {(static_cast<float>(sin(M_PI * m/lat_lines) * cos(2 * M_PI * n/lon_lines)) * radius) + pos.x,
-                static_cast<float>(sin(M_PI * m/lat_lines) * sin(2 * M_PI * n/lon_lines)) * radius + pos.y,
-                static_cast<float>(cos(M_PI * m/lat_lines)) * radius + pos.z};
-        }
-    }
+    std::vector<uint32_t> i {0, 1, 2};
 
-    std::vector<uint32_t> indices;
-
+    drawMesh(v, i, color, true);
 }
 
 void Flux::Debug::drawPoint(const glm::vec3 &pos, float radius, Colors color, bool wireframe)
