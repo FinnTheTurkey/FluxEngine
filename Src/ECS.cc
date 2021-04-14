@@ -135,6 +135,8 @@ EntityRef Flux::ECSCtx::getNamedEntity(const std::string &name)
     for (int i = 0; i < FLUX_MAX_ENTITIES; i++)
     {
         auto er = EntityRef(this, i);
+        if (getEntity(er) == nullptr) continue;
+
         if (er.hasComponent<NameCom>())
         {
             if (er.getComponent<NameCom>()->name == name)

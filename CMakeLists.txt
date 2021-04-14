@@ -91,6 +91,7 @@ add_library(FluxEngine STATIC
 
     # Physics
     Src/Physics/Physics.cc
+    Src/Physics/RigidBody.cc
 
     # Source files for GLFW window
     ${GLFW_SOURCE}

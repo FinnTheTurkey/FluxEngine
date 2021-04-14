@@ -645,9 +645,6 @@ void DS::SortedExtremaList::addItemToCollisionList(BoundingBox* box, int i, std:
 
 std::vector<BoundingBox*> DS::SortedExtremaList::getCollidingBoxes(BoundingBox* box)
 {
-    // TODO: Deal with this better
-    // if (!started) return std::vector<BoundingBox*>();
-
     std::vector<BoundingBox*> collisions;
     const int start = box->storage[index].minima_chunk_index+1;
     collisions.resize(box->storage[index].maxima_chunk_index - start);
@@ -658,6 +655,46 @@ std::vector<BoundingBox*> DS::SortedExtremaList::getCollidingBoxes(BoundingBox* 
         //     LOG_INFO("No");
         // }
         addItemToCollisionList(extrema[i].box, i - start, collisions);
+    }
+
+    // Get boxes bigger than us
+    if (box->storage[index].minima_chunk_index < extrema.size() - box->storage[index].maxima_chunk_index)
+    {
+        // Less extrema before
+        for (int i = 0; i < box->storage[index].minima_chunk_index; i++)
+        {
+            // Check if it covers our box
+            if (extrema[i].type == Minima)
+            {
+                // Check against maxima not minima so that we don't waste resources
+                // checking, then removing extrema between the box's extrema
+                if (extrema[i].box->storage[index].maxima_chunk_index > box->storage[index].maxima_chunk_index)
+                {
+                    const int size = collisions.size();
+                    collisions.resize(size + 1);
+                    addItemToCollisionList(extrema[i].box, size, collisions);
+                }
+            }
+        }
+    }
+    else
+    {
+        // Less extrema after
+        for (int i = box->storage[index].maxima_chunk_index+1; i < extrema.size(); i++)
+        {
+            // Check if it covers our box
+            if (extrema[i].type == Maxima)
+            {
+                // Check against minima not maxima so that we don't waste resources
+                // checking, then removing extrema between the box's extrema
+                if (extrema[i].box->storage[index].minima_chunk_index < box->storage[index].minima_chunk_index)
+                {
+                    const int size = collisions.size();
+                    collisions.resize(size + 1);
+                    addItemToCollisionList(extrema[i].box, size, collisions);
+                }
+            }
+        }
     }
 
     return collisions;
@@ -1085,6 +1122,7 @@ std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef enti
 
         if (bc->frame != frames)
         {
+            // LOG_INFO("Redoing BB");
             bc->collisions = bc->world->getColliding(bc->box);
             bc->frame = frames;
         }
@@ -1092,6 +1130,7 @@ std::vector<BoundingBox*> Flux::Physics::getBoundingBoxCollisions(EntityRef enti
         return bc->collisions;
     }
 
+    // LOG_INFO("No Bounding Com");
     return std::vector<BoundingBox*>();
 }
 
@@ -1747,6 +1786,7 @@ std::vector<Collision> Flux::Physics::getCollisions(EntityRef entity)
         // Process all the collisions :(
         auto collisions = std::vector<Collision>();
         cc->collider->updateTransform(tc->model);
+        // std::cout << bc->collisions.size() << "\n";
 
         int c = 0;
         for (auto i : bc->collisions)
@@ -1799,7 +1839,7 @@ std::vector<Collision> Flux::Physics::move(EntityRef entity, const glm::vec3 &po
     // "Solve" collisions
     for (auto i : collisions)
     {
-        Flux::Transform::translate(entity, i.normal * i.depth);
+        Flux::Transform::globalTranslate(entity, i.normal * i.depth);
     }
 
     return collisions;
