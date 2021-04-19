@@ -105,6 +105,7 @@ lights(new Renderer::LightSystem)
 
 void GLRendererSystem::onSystemAdded(ECSCtx *ctx)
 {
+    ctx->addSystemFront(new Flux::Physics::RigidSystem);
     ctx->addSystemFront(new Flux::Physics::NarrowPhaseSystem);
     ctx->addSystemFront(lights);
     ctx->addSystemFront(new Flux::Physics::BroadPhaseSystem);

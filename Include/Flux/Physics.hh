@@ -4,7 +4,8 @@
 #include "Flux/ECS.hh"
 #include "Flux/Flux.hh"
 #include "Flux/Renderer.hh"
-#include "glm/detail/type_vec.hpp"
+#include "glm/glm.hpp"
+#include "glm/gtc/quaternion.hpp"
 #include <algorithm>
 #include <array>
 #include <forward_list>
@@ -535,6 +536,65 @@ namespace GJK
     the wall.
     */
     std::vector<Collision> move(EntityRef entity, const glm::vec3& position);
+
+
+    // ===========================================
+    // Rigid body stuff
+    // ===========================================
+
+    struct Force
+    {
+        glm::vec3 position;
+        glm::vec3 force;
+    };
+
+    /*
+    Component that stores info about a rigid body, and what forces are acting apon it
+    */
+    struct RigidCom: public Component
+    {
+        FLUX_COMPONENT(RigidCom, RigidCom);
+
+        // Static properties
+        float mass;
+        glm::mat3 inertia;
+        glm::mat3 inertia_inversed;
+
+        // Dynamic properties
+        // glm::vec3 velocity;
+
+        // glm::vec3 linear;
+        // glm::vec3 angular;
+
+        // State variables
+        glm::vec3 dposition; // x(t)
+        glm::mat3 dorientation; // q(t)
+        glm::vec3 linear; // P(t)
+        glm::vec3 angular; // L(t)
+
+        // Derived quantities
+        glm::mat3 global_inertia_inv; // I-1(t)
+        glm::mat3 rotation; // R(t)
+        glm::vec3 linear_velocity; // v(t)
+        glm::vec3 angular_velocity; // ω(t)
+
+        // Computed quantities
+        glm::vec3 force; // F(t)
+        glm::vec3 torque; // t(t)
+
+        std::vector<Force> forces;
+
+    };
+
+    class RigidSystem: public System
+    {
+    public:
+        void runSystem(EntityRef entity, float delta) override;
+    };
+
+    void giveRigidBody(EntityRef entity, float mass);
+
+    void addForce(EntityRef entity, const glm::vec3& position, const glm::vec3& direction);
 
 }}
 
