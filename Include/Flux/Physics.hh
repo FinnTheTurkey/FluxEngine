@@ -4,6 +4,7 @@
 #include "Flux/ECS.hh"
 #include "Flux/Flux.hh"
 #include "Flux/Renderer.hh"
+#include "glm/detail/precision.hpp"
 #include "glm/glm.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include <algorithm>
@@ -419,6 +420,7 @@ namespace DS
     struct CollisionData
     {
         glm::vec3 normal;
+        glm::vec3 offset;
         float depth;
         bool colliding;
     };
@@ -426,6 +428,7 @@ namespace DS
     struct Collision
     {
         glm::vec3 normal;
+        glm::vec3 offset;
         float depth;
         bool colliding;
         Flux::EntityRef entity;
@@ -434,22 +437,29 @@ namespace DS
 // Seperate namespace to keep non-user facing GJK away
 namespace GJK
 {
-    glm::vec3 support(const Collider* col_a, const Collider* col_b, const glm::vec3& direction);
+    std::pair<glm::vec3, glm::vec3> support(const Collider* col_a, const Collider* col_b, const glm::vec3& direction);
+
+    struct PolytopePoint
+    {
+        glm::vec3 point;
+        glm::vec3 sup_a;
+    };
 
     class Simplex
     {
     private:
-        std::array<glm::vec3, 4> points;
+        std::array<PolytopePoint, 4> points;
 
     public:
         unsigned int size;
 
         Simplex()
+        // WARNING: This like is sketchy
         : points {glm::vec3(), glm::vec3(), glm::vec3(), glm::vec3()},
         size(0)
         {}
 
-        Simplex& operator=(std::initializer_list<glm::vec3> list)
+        Simplex& operator=(std::initializer_list<PolytopePoint> list)
         {
             for (auto v = list.begin(); v != list.end(); v++)
             {
@@ -460,12 +470,12 @@ namespace GJK
             return *this;
         }
         
-        glm::vec3& operator[] (unsigned int i)
+        PolytopePoint& operator[] (unsigned int i)
         {
             return points[i];
         }
 
-        void addPoint(const glm::vec3& point)
+        void addPoint(const PolytopePoint& point)
         {
             points = {point, points[0], points[1], points[2]};
             size = std::min(size + 1, 4u);
@@ -492,7 +502,7 @@ namespace GJK
     std::pair<bool, Simplex> GJK(const Collider* col_a, const Collider* col_b);
 
     /** Better helper functions for EPA */
-    uint32_t getClosestTri(std::vector<glm::vec4>& normals, std::vector<glm::vec3>& polytope, std::vector<uint32_t>& faces);
+    uint32_t getClosestTri(std::vector<glm::vec4>& normals, std::vector<PolytopePoint>& polytope, std::vector<uint32_t>& faces);
 
     // Gets the useful information from the actual collision detection
     CollisionData EPA(Simplex simplex, const Collider* col_a, const Collider* col_b);
@@ -548,6 +558,13 @@ namespace GJK
         glm::vec3 force;
     };
 
+    struct Constraint
+    {
+        glm::vec3 normal;
+        float (*c)(EntityRef entity);
+    };
+
+
     /*
     Component that stores info about a rigid body, and what forces are acting apon it
     */
@@ -584,6 +601,8 @@ namespace GJK
 
         std::vector<Force> forces;
 
+        // Constraints
+        std::vector<Constraint> constraints;
     };
 
     class RigidSystem: public System
@@ -592,9 +611,18 @@ namespace GJK
         void runSystem(EntityRef entity, float delta) override;
     };
 
+    class SolverSystem: public System
+    {
+    public:
+        void runSystem(EntityRef entity, float delta) override;
+    };
+
     void giveRigidBody(EntityRef entity, float mass);
 
     void addForce(EntityRef entity, const glm::vec3& position, const glm::vec3& direction);
+
+    /** Helper function to apply an impulse */
+    void applyImpulse(float delta, RigidCom* rc, const glm::vec3& contact_normal, const glm::vec3& normal_offset);
 
 }}
 

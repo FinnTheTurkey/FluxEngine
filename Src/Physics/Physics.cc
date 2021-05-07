@@ -1185,9 +1185,10 @@ void ConvexCollider::updateTransform(const glm::mat4 &global_transform)
     }
 }
 
-glm::vec3 GJK::support(const Collider* col_a, const Collider* col_b, const glm::vec3 &direction)
+std::pair<glm::vec3, glm::vec3> GJK::support(const Collider* col_a, const Collider* col_b, const glm::vec3 &direction)
 {
-    return col_a->findFurthestPoint(direction) - col_b->findFurthestPoint(-direction);
+    auto sup_a = col_a->findFurthestPoint(direction);
+    return {sup_a - col_b->findFurthestPoint(-direction), sup_a};
 }
 
 bool GJK::nextSimplex(Simplex& points, glm::vec3& direction)
@@ -1211,8 +1212,8 @@ bool sameDirection(const glm::vec3& direction, const glm::vec3& ao)
 
 bool GJK::lineSimplex(Simplex &points, glm::vec3 &direction)
 {
-    glm::vec3 a = points[0];
-    glm::vec3 b = points[1];
+    glm::vec3 a = points[0].point;
+    glm::vec3 b = points[1].point;
 
     auto ab = b - a;
     auto ao = -a;
@@ -1223,7 +1224,7 @@ bool GJK::lineSimplex(Simplex &points, glm::vec3 &direction)
     }
     else
     {
-        points = {a};
+        points = {points[0]};
         direction = ao;
     }
 
@@ -1232,9 +1233,9 @@ bool GJK::lineSimplex(Simplex &points, glm::vec3 &direction)
 
 bool GJK::triangleSimplex(Simplex &points, glm::vec3 &direction)
 {
-    glm::vec3 a = points[0];
-    glm::vec3 b = points[1];
-    glm::vec3 c = points[2];
+    glm::vec3 a = points[0].point;
+    glm::vec3 b = points[1].point;
+    glm::vec3 c = points[2].point;
 
     auto ab = b - a;
     auto ac = c - a;
@@ -1246,19 +1247,19 @@ bool GJK::triangleSimplex(Simplex &points, glm::vec3 &direction)
     {
         if (sameDirection(ac, ao))
         {
-            points = {a, c};
+            points = {points[0], points[2]};
             direction = glm::cross(glm::cross(ac, ao), ac);
         }
         else
         {
-            return lineSimplex(points = {a, b}, direction);
+            return lineSimplex(points = { points[0], points[1]}, direction);
         }
     }
     else
     {
         if (sameDirection(glm::cross(ab, abc), ao))
         {
-            return lineSimplex(points = {a, b}, direction);
+            return lineSimplex(points = { points[0], points[1]}, direction);
         }
         else
         {
@@ -1268,7 +1269,7 @@ bool GJK::triangleSimplex(Simplex &points, glm::vec3 &direction)
             }
             else
             {
-                points = {a, c, b};
+                points = { points[0], points[2], points[1]};
                 direction = -abc;
             }
         }
@@ -1279,10 +1280,10 @@ bool GJK::triangleSimplex(Simplex &points, glm::vec3 &direction)
 
 bool GJK::tetrahedronSimplex(Simplex &points, glm::vec3 &direction)
 {
-    glm::vec3 a = points[0];
-    glm::vec3 b = points[1];
-    glm::vec3 c = points[2];
-    glm::vec3 d = points[3];
+    glm::vec3 a = points[0].point;
+    glm::vec3 b = points[1].point;
+    glm::vec3 c = points[2].point;
+    glm::vec3 d = points[3].point;
 
     auto ab = b - a;
     auto ac = c - a;
@@ -1295,17 +1296,17 @@ bool GJK::tetrahedronSimplex(Simplex &points, glm::vec3 &direction)
 
     if (sameDirection(abc, ao))
     {
-        return triangleSimplex(points = {a, b, c}, direction);
+        return triangleSimplex(points = {points[0], points[1], points[2]}, direction);
     }
 
     if (sameDirection(acd, ao))
     {
-        return triangleSimplex(points = {a, c, d}, direction);
+        return triangleSimplex(points = {points[0], points[2], points[3]}, direction);
     }
 
     if (sameDirection(adb, ao))
     {
-        return triangleSimplex(points = {a, d, b}, direction);
+        return triangleSimplex(points = {points[0], points[3], points[1]}, direction);
     }
 
     return true;
@@ -1314,18 +1315,20 @@ bool GJK::tetrahedronSimplex(Simplex &points, glm::vec3 &direction)
 std::pair<bool, Flux::Physics::GJK::Simplex> GJK::GJK(const Collider* col_a, const Collider* col_b)
 {
     // Start with a random direction
-    auto sup_v = support(col_a, col_b, glm::vec3(1, 0, 0));
+    auto sup_v_p = support(col_a, col_b, glm::vec3(1, 0, 0));
+    auto sup_v = sup_v_p.first;
 
     // Start the Simplex
     Simplex points;
-    points.addPoint(sup_v);
+    points.addPoint({sup_v_p.first, sup_v_p.second});
 
     // New direction is towards the origin (because -x goes towards it)
     glm::vec3 direction = -sup_v;
 
     while (true)
     {
-        sup_v = support(col_a, col_b, direction);
+        sup_v_p = support(col_a, col_b, direction);
+        sup_v = sup_v_p.first;
 
         if (glm::dot(sup_v, direction) <= 0)
         {
@@ -1333,7 +1336,7 @@ std::pair<bool, Flux::Physics::GJK::Simplex> GJK::GJK(const Collider* col_a, con
             return {false, points};
         }
 
-        points.addPoint(sup_v);
+        points.addPoint({sup_v_p.first, sup_v_p.second});
 
         if (nextSimplex(points, direction))
         {
@@ -1520,7 +1523,7 @@ std::pair<bool, Flux::Physics::GJK::Simplex> GJK::GJK(const Collider* col_a, con
 //     return {min_normal, min_distance + 0.001f, true};
 // }
 
-uint32_t GJK::getClosestTri(std::vector<glm::vec4> &normals, std::vector<glm::vec3> &polytope, std::vector<uint32_t> &faces)
+uint32_t GJK::getClosestTri(std::vector<glm::vec4> &normals, std::vector<PolytopePoint> &polytope, std::vector<uint32_t> &faces)
 {
     uint32_t closest = 0;
     float closest_distance = FLT_MAX;
@@ -1529,9 +1532,9 @@ uint32_t GJK::getClosestTri(std::vector<glm::vec4> &normals, std::vector<glm::ve
     for (auto i = 0; i < faces.size(); i += 3)
     {
         // Get our vertices
-        glm::vec3 a = polytope[faces[i]];
-        glm::vec3 b = polytope[faces[i+1]];
-        glm::vec3 c = polytope[faces[i+2]];
+        glm::vec3 a = polytope[faces[i]].point;
+        glm::vec3 b = polytope[faces[i+1]].point;
+        glm::vec3 c = polytope[faces[i+2]].point;
 
         // Generate normal
         glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
@@ -1558,11 +1561,25 @@ uint32_t GJK::getClosestTri(std::vector<glm::vec4> &normals, std::vector<glm::ve
     return closest;
 }
 
+void Barycentric(glm::vec3 p, glm::vec3 a, glm::vec3 b, glm::vec3 c, float &u, float &v, float &w)
+{
+    glm::vec3 v0 = b - a, v1 = c - a, v2 = p - a;
+    float d00 = glm::dot(v0, v0);
+    float d01 = glm::dot(v0, v1);
+    float d11 = glm::dot(v1, v1);
+    float d20 = glm::dot(v2, v0);
+    float d21 = glm::dot(v2, v1);
+    float denom = d00 * d11 - d01 * d01;
+    v = (d11 * d20 - d01 * d21) / denom;
+    w = (d00 * d21 - d01 * d20) / denom;
+    u = 1.0f - v - w;
+}
+
 CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* col_b)
 {
     bool done = false;
     // Create polytope as a "mesh"
-    std::vector<glm::vec3> polytope;
+    std::vector<PolytopePoint> polytope;
     polytope.push_back(simplex[0]);
     polytope.push_back(simplex[1]);
     polytope.push_back(simplex[2]);
@@ -1586,7 +1603,9 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
         uint32_t closest_tri = getClosestTri(normals, polytope, faces);
 
         auto distance = normals[closest_tri].w;
-        auto sup_v = support(col_a, col_b, glm::vec3(normals[closest_tri]));
+        auto sup = support(col_a, col_b, glm::vec3(normals[closest_tri]));
+        auto sup_v = sup.first;
+        auto sup_a = sup.second;
         auto sup_dist = glm::dot(sup_v - glm::vec3(0, 0, 0), glm::vec3(normals[closest_tri]));
 
         if (sup_dist - distance > 0.01f)
@@ -1596,7 +1615,7 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
             for (int i = 0; i < normals.size(); i++)
             {
                 // if (glm::dot(glm::vec3(normals[i]), sup_v) > 0)
-                if (glm::dot(glm::vec3(normals[i]), sup_v - polytope[faces[i*3]]) > 0)
+                if (glm::dot(glm::vec3(normals[i]), sup_v - polytope[faces[i*3]].point) > 0)
                 {
                     // Store it's edges for later
                     uint32_t v1 = faces[i*3];
@@ -1636,7 +1655,7 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
             // it's like they don't exist.
             // And we're using a vector so they'll get freed automatically
             uint32_t new_index = polytope.size();
-            polytope.push_back(sup_v);
+            polytope.push_back({sup_v, sup_a});
 
             // Add new triangles
             for (auto i : edges)
@@ -1660,8 +1679,21 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
 
             // Debug::drawMesh(vtx, faces, Debug::Green, true);
 
-            // Multiply normal by -1, because for some reason it's reversed
-            return CollisionData {glm::vec3(normals[closest_tri]) * glm::vec3(-1), distance, true};
+            // Project origin onto closest_tri
+            float dist = glm::dot(glm::vec3(0), glm::vec3(normals[closest_tri]));
+            glm::vec3 proj_point = glm::vec3(0) - dist * glm::vec3(normals[closest_tri]);
+
+            // Convert to real coordinates
+            float bary_u, bary_v, bary_w;
+            Barycentric(glm::vec3(normals[closest_tri]) * distance,
+                        polytope[faces[closest_tri * 3]].point, polytope[faces[closest_tri * 3 + 1]].point, polytope[faces[closest_tri * 3 + 2]].point,
+                        bary_u, bary_v, bary_w);
+
+            glm::vec3 col_point = glm::vec3(bary_u * polytope[faces[closest_tri * 3]].sup_a.x,
+                                            bary_v * polytope[faces[closest_tri * 3 + 1]].sup_a.y,
+                                            bary_w * polytope[faces[closest_tri * 3 + 2]].sup_a.z);
+
+            return CollisionData {glm::vec3(normals[closest_tri]) * glm::vec3(-1), col_point, distance, true};
         }
 
         iteration_count ++;
@@ -1681,7 +1713,7 @@ CollisionData GJK::EPA(Simplex simplex, const Collider* col_a, const Collider* c
 
     // Debug::drawMesh(vtx, faces, Debug::Red, true);
 
-    return CollisionData {glm::vec3(), 0, false};
+    return CollisionData {glm::vec3(), glm::vec3(), 0, false};
 }
 
 CollisionData GJK::getColliding(const Collider *col_a, const Collider *col_b)
@@ -1693,7 +1725,7 @@ CollisionData GJK::getColliding(const Collider *col_a, const Collider *col_b)
         return EPA(simplex, col_a, col_b);
     }
 
-    return {glm::vec3(), 0, false};
+    return {glm::vec3(), glm::vec3(), 0, false};
 }
 
 // ==================================================
@@ -1811,7 +1843,9 @@ std::vector<Collision> Flux::Physics::getCollisions(EntityRef entity)
                     // Step 3: Profit, or don't profit
                     if (colliding.colliding)
                     {
-                        collisions.push_back({colliding.normal, colliding.depth, colliding.colliding, i->entity});
+                        // TODO: Currently offset is in local coordinates
+                        // Which means it doesn't take into account scale
+                        collisions.push_back({colliding.normal, colliding.offset, colliding.depth, colliding.colliding, i->entity});
                     }
                 }
             }
