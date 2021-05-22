@@ -585,7 +585,8 @@ namespace GJK
 
         // State variables
         glm::vec3 dposition; // x(t)
-        glm::mat3 dorientation; // q(t)
+        glm::quat dorientation; // q(t)
+        glm::vec3 dscale;
         glm::vec3 linear; // P(t)
         glm::vec3 angular; // L(t)
 
@@ -622,7 +623,7 @@ namespace GJK
     void addForce(EntityRef entity, const glm::vec3& position, const glm::vec3& direction);
 
     /** Helper function to apply an impulse */
-    void applyImpulse(float delta, RigidCom* rc, const glm::vec3& contact_normal, const glm::vec3& normal_offset);
+    std::pair<glm::vec3, glm::vec3> applyImpulse(float delta, RigidCom* rc, const glm::vec3& contact_normal, const glm::vec3& normal_offset, glm::vec3 bias, std::pair<glm::vec3, glm::vec3> lambdas, bool first);
 
 }}
 

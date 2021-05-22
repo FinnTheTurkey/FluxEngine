@@ -141,8 +141,8 @@ void Flux::GLRenderer::createWindow(const int &width, const int &height, const s
 
     // Disable V-Sync
     // TODO: Make this an option
-    glfwSwapInterval(0); // 1 for v-sync
-    // glfwSwapInterval(1);
+    // glfwSwapInterval(0); // 1 for v-sync
+    glfwSwapInterval(1);
 
 #ifdef EMSCRIPTEN
     glfwSwapInterval(1);

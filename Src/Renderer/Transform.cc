@@ -169,6 +169,7 @@ void Flux::Transform::globalTranslate(EntityRef entity, const glm::vec3 &offset)
     // To translate globally, we have to apply the inverse global translation
     // To our offset
     // I really hope this works
+    auto tc = entity.getComponent<TransformCom>();
     Flux::Transform::translate(entity, glm::vec3(glm::inverse(global_transform) * glm::vec4(offset, 0)));;
 }
 
